@@ -1,0 +1,12 @@
+# Core
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+requests>=2.31
+
+# Optional parsers (the pipeline runs without them; install for full support)
+python-evtx>=0.7.4   # native .evtx parsing (XML/JSONL exports work without it)
+pefile>=2023.2.7     # richer PE import tables (basic PE parsing is built-in)
+
+# Dev
+pytest>=8.0

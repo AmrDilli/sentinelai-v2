@@ -1,0 +1,184 @@
+# SentinelAI v2
+
+An AI-powered cybersecurity **triage and response** platform. SentinelAI analyzes
+network captures, Windows event logs, and suspicious files using an AI model as the
+core reasoning engine — not just static rules. Every module maps findings to
+**MITRE ATT&CK**, scores severity, generates a tailored **investigation playbook**,
+and proposes tiered **automated response (SOAR)** actions.
+
+It is built to be useful to a real analyst *and* readable for someone learning security.
+
+---
+
+## The key idea: pre-process, then let the AI reason
+
+Raw security artifacts (a multi-megabyte PCAP, thousands of event-log records, a
+binary) are far too large and noisy to hand directly to an AI, and doing so blows
+the context window while burying the signal.
+
+So SentinelAI puts a **deterministic pre-processor** in front of the model. The
+pre-processor parses the raw file and emits a compact, structured **summary** — flows,
+entropy scores, event sequences, extracted strings, IOCs. The AI then reasons over
+that summary. This keeps full analytical accuracy while staying inside the context
+window, and makes runs cheaper and more reproducible.
+
+```
+Raw File → Parser → Pre-processor → [Summary] → AI Analysis → Scoring → Playbook → SOAR → Dashboard
+```
+
+Every module's pre-processor outputs the **same** `Summary` JSON shape
+(`backend/app/core/schema.py`). Because of that single contract, the AI engine,
+scoring, playbook generator, MITRE mapping, and dashboard never need to know which
+kind of file was analyzed. **Adding a new file type = writing one new pre-processor.**
+Stages can be developed, tested, and swapped independently — and teammates can each
+own a stage without stepping on each other.
+
+---
+
+## Modules
+
+**Network (PCAP)** — dependency-free pcap parser (Ethernet/IP/TCP/UDP, DNS queries,
+TLS ClientHello + SNI). The pre-processor reconstructs flows, computes payload
+entropy, and detects beaconing (low-jitter periodic callbacks), high-entropy traffic
+on cleartext ports, port scans, suspicious/DGA-like DNS, legacy TLS, plaintext
+protocols, and volume/baseline anomalies. Optional AbuseIPDB reputation + IP
+geolocation enrichment.
+
+**Forensics (Windows event logs)** — accepts `.evtx` (via optional `python-evtx`),
+or `.xml`/`.jsonl` exports (stdlib). The pre-processor extracts event-ID frequencies
+and a chronological timeline, then detects *sequences*: brute-force-then-success,
+account-created-then-elevated, new service/scheduled task, Defender disabled, and
+log-clearing cover-ups — so the AI interprets the **story**, not isolated IDs.
+
+**Malware (static, no execution)** — hashes (MD5/SHA1/SHA256), whole-file and
+per-section entropy (packing detection), stdlib PE header parsing (machine, compile
+timestamp, sections, signature presence; richer imports via optional `pefile`),
+string extraction with IOC classification (URLs, IPs, domains, registry Run keys,
+wallet addresses, suspicious commands), and capability inference from API
+combinations (injection, ransomware sweep, keylogging, C2…). Optional VirusTotal
+hash lookup.
+
+**Cross-module correlation** — select two or more completed analyses and SentinelAI
+produces a single unified score, combined ATT&CK matrix, and one investigation
+playbook that connects findings across modules (e.g. network beaconing *and* a new
+admin account created at the same time → one incident path).
+
+---
+
+## AI providers (one env var to switch)
+
+`AI_PROVIDER` selects the engine:
+
+- `mock` — **default**, fully offline and deterministic. Promotes pre-processor
+  observations into findings so the entire pipeline, API, dashboard, and tests run
+  with **no API key**. Great for development, demos, and CI.
+- `deepseek` — OpenAI-compatible, cheap; recommended for development/testing.
+- `claude` — Anthropic Messages API for the production/final version.
+
+Switching is a single line in `.env`; no code changes (`backend/app/ai/provider.py`).
+
+---
+
+## Quick start
+
+### 1. Generate sample data (no real malware/captures needed)
+
+```bash
+python samples/generate_samples.py
+# → samples/generated/{beaconing.pcap, compromise.xml, fake_malware.bin}
+```
+
+### 2. Backend
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate   # optional
+pip install -r requirements.txt
+cp ../.env.example ../.env          # defaults to AI_PROVIDER=mock — works offline
+uvicorn app.main:app --reload       # http://localhost:8000/docs
+```
+
+### 3. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev                         # http://localhost:5173 (proxies /api → :8000)
+```
+
+Open the dashboard, drag in one of the sample files (or your own), and watch the
+report build: overview + score, severity distribution, findings with MITRE tags and
+remediation, activity timeline, ATT&CK matrix, investigation playbook, and SOAR
+actions. Check two analyses to run a correlation.
+
+### Run the tests
+
+```bash
+cd backend
+pip install pytest
+AI_PROVIDER=mock pytest -q
+```
+
+The suite covers each parser/pre-processor, scoring, MITRE mapping, SOAR tiers, the
+full pipeline per module, and cross-module correlation — all offline.
+
+---
+
+## API
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/api/analyze` | Upload a file (multipart `file`, optional `module`); runs in background |
+| `GET`  | `/api/analyses` | List analyses with status/score/severity |
+| `GET`  | `/api/analyses/{id}` | Full report for one analysis |
+| `POST` | `/api/correlate` | Body: JSON array of ids → unified cross-module view |
+| `POST` | `/api/soar/{id}/approve?action_index=N` | Approve a pending (medium-tier) action |
+| `GET`  | `/api/health` | Provider + enrichment key status |
+
+---
+
+## SOAR tiers
+
+Response actions are gated by the overall score: **low → notify only**,
+**medium → suggest and wait for analyst approval**, **high/critical → act
+immediately** (execution is simulated/logged here; wiring real EDR/firewall APIs is
+a clean integration point in `backend/app/core/soar.py`).
+
+---
+
+## Project layout
+
+```
+backend/
+  app/
+    core/        schema.py (the Summary contract), scoring, mitre, soar
+    modules/
+      network/   parser.py, preprocessor.py, enrich.py
+      forensics/ parser.py, preprocessor.py
+      malware/   parser.py, preprocessor.py, enrich.py
+    ai/          provider.py (deepseek/claude/mock), analyzer.py, playbook.py
+    pipeline/    orchestrator.py (wires all stages, + cross-module correlate)
+    api/         routes.py
+    main.py
+  tests/         test_pipeline.py
+frontend/        React + Vite dashboard (Recharts)
+samples/         generate_samples.py
+```
+
+---
+
+## Roadmap / stretch goals
+
+- **Live capture mode** — the architecture is already live-ready: the orchestrator is
+  designed so the pre-processor and AI run incrementally on a schedule instead of once,
+  with throttling so the AI is only called on meaningful change. File-upload mode ships
+  first; the dashboard polls today and can move to websockets/streaming.
+- **Dynamic malware analysis** — run samples in an isolated sandbox VM to observe live
+  behavior (kept as future work due to setup complexity).
+- **Persistence** — swap the in-memory analysis store for SQLite/Postgres (isolated to
+  `backend/app/api/routes.py`).
+
+> Note: this is an educational/portfolio project. The bundled `fake_malware.bin` is a
+> harmless byte pattern that *looks* suspicious to static analysis — it does not execute.
+> pcapng captures should be converted first: `tshark -F pcap -r in.pcapng -w out.pcap`.
+```
