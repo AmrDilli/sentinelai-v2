@@ -109,3 +109,54 @@ def test_cross_module_correlation():
     assert set(result["modules"]) == {"network", "forensics"}
     assert result["playbook"]
     assert 0 <= result["score"] <= 100
+
+
+# ---- detection depth (round 2) ----------------------------------------------
+def test_network_http_and_dns_tunneling():
+    packets = net_parser.parse_pcap(str(SAMPLES / "beaconing.pcap"))
+    assert any(p.http.get("host") for p in packets)  # HTTP request parsed
+    summary = net_pre.preprocess(packets, "beaconing.pcap")
+    types = {o.type for o in summary.observations}
+    assert "dns_tunneling" in types
+    assert "tooling_user_agent" in types or "suspicious_http" in types
+
+
+def test_malware_rule_engine():
+    artifacts = mal_parser.analyze_file(str(SAMPLES / "fake_malware.bin"))
+    assert artifacts.rule_hits  # YARA-style rules fired
+    summary = mal_pre.preprocess(artifacts, "fake_malware.bin")
+    assert any(o.type == "rule_match" for o in summary.observations)
+
+
+def test_forensics_extra_sequences():
+    events = for_parser.parse_log(str(SAMPLES / "compromise.xml"))
+    summary = for_pre.preprocess(events, "compromise.xml")
+    types = {o.type for o in summary.observations}
+    assert "rdp_lateral_movement" in types
+    assert "persistence_stacking" in types
+    assert "defense_evasion" in types
+
+
+# ---- AI quality (round 2) ---------------------------------------------------
+def test_ai_response_cache():
+    from app.ai import analyzer
+    from app.modules.malware import parser as mp, preprocessor as mpp
+    art = mp.analyze_file(str(SAMPLES / "fake_malware.bin"))
+    summary = mpp.preprocess(art, "fake_malware.bin")
+    r1 = analyzer.analyze(summary)
+    r2 = analyzer.analyze(summary)
+    assert r1["cached"] is False
+    assert r2["cached"] is True
+    assert "usage" in r1
+
+
+# ---- persistence (round 2) --------------------------------------------------
+def test_sqlite_store(tmp_path, monkeypatch):
+    from app.config import settings
+    from app.core import store
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "t.db"))
+    store.init_db()
+    store.upsert({"id": "x1", "filename": "f", "module": "network", "status": "running"})
+    assert store.get("x1")["status"] == "running"
+    assert len(store.list_all()) == 1
+    assert store.delete("x1") and store.get("x1") is None

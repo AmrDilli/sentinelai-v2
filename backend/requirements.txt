@@ -10,3 +10,4 @@ pefile>=2023.2.7     # richer PE import tables (basic PE parsing is built-in)
 
 # Dev
 pytest>=8.0
+httpx>=0.27          # FastAPI TestClient (API tests)
