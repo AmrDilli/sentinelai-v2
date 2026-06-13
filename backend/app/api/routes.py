@@ -17,16 +17,19 @@ Analyses (all scoped to the authenticated user via Authorization: Bearer <token>
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import threading
 import uuid
 from pathlib import Path
 
 from fastapi import (APIRouter, BackgroundTasks, HTTPException, UploadFile, File,
-                     Form, Header, Body, Depends)
+                     Form, Header, Body, Depends, WebSocket, WebSocketDisconnect)
+from fastapi.responses import Response
 
 from app.config import settings
 from app.pipeline import orchestrator
-from app.core import store, auth
+from app.core import store, auth, report_pdf, threatintel
 from app.core.schema import Report
 
 router = APIRouter()
@@ -127,10 +130,11 @@ async def analyze(background: BackgroundTasks,
     return {"id": job_id, "module": detected, "status": "running"}
 
 
-@router.get("/analyses")
-def list_analyses(user: dict = Depends(current_user)):
+def _serialize_analyses(user_id: str) -> list[dict]:
+    """Shape store records into the list payload the dashboard consumes. Shared
+    by the REST list endpoint and the WebSocket live-progress stream."""
     items = []
-    for a in store.list_all(user["id"]):
+    for a in store.list_all(user_id):
         report = a.get("report", {})
         items.append({
             "id": a["id"], "filename": a.get("filename"), "module": a.get("module"),
@@ -142,7 +146,40 @@ def list_analyses(user: dict = Depends(current_user)):
             # round-trip per case. Running/failed cases carry no report yet.
             "report": report or None,
         })
-    return {"analyses": items}
+    return items
+
+
+@router.get("/analyses")
+def list_analyses(user: dict = Depends(current_user)):
+    return {"analyses": _serialize_analyses(user["id"])}
+
+
+@router.websocket("/ws/analyses")
+async def ws_analyses(websocket: WebSocket, token: str = ""):
+    """Live progress stream. The client connects with ?token=<session token>
+    and receives a fresh {analyses: [...]} push whenever anything changes
+    (status, progress %, a new case) — no polling required. Auth is via query
+    param because browsers can't set headers on a WebSocket handshake."""
+    user = auth.user_for_token(token)
+    if not user:
+        await websocket.close(code=1008)  # policy violation / unauthenticated
+        return
+    await websocket.accept()
+    last_payload = None
+    try:
+        while True:
+            # Run the sync SQLite read off the event loop.
+            items = await asyncio.to_thread(_serialize_analyses, user["id"])
+            payload = json.dumps(items, sort_keys=True)
+            if payload != last_payload:
+                last_payload = payload
+                await websocket.send_json({"analyses": items})
+            await asyncio.sleep(0.8)
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        # Any send failure (client gone) ends the stream cleanly.
+        return
 
 
 @router.get("/analyses/{analysis_id}")
@@ -153,11 +190,48 @@ def get_analysis(analysis_id: str, user: dict = Depends(current_user)):
     return a
 
 
+@router.get("/analyses/{analysis_id}/report.pdf")
+def report_pdf_download(analysis_id: str, user: dict = Depends(current_user)):
+    """Server-rendered, branded incident-report PDF for a completed analysis."""
+    a = store.get(analysis_id, user["id"])
+    if not a or a.get("status") != "completed" or "report" not in a:
+        raise HTTPException(404, "Completed analysis not found")
+    if not report_pdf.is_available():
+        raise HTTPException(501, "PDF generation unavailable (install reportlab)")
+    report = a["report"]
+    safe_name = "".join(c if c.isalnum() or c in "-_." else "_"
+                        for c in str(report.get("source_file", "report")))
+    filename = f"sentinelai_{report.get('module', 'report')}_{safe_name}.pdf"
+    return Response(
+        content=report_pdf.build_report_pdf(report),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.delete("/analyses/{analysis_id}")
 def delete_analysis(analysis_id: str, user: dict = Depends(current_user)):
     if not store.delete(analysis_id, user["id"]):
         raise HTTPException(404, "Analysis not found")
     return {"ok": True}
+
+
+@router.post("/analyses/{analysis_id}/explain")
+def explain_finding(analysis_id: str, body: dict = Body(...),
+                    user: dict = Depends(current_user)):
+    """Expand one finding into an analyst-grade drill-down explanation."""
+    from app.ai.explain import explain_finding as _explain
+    a = store.get(analysis_id, user["id"])
+    if not a or a.get("status") != "completed" or "report" not in a:
+        raise HTTPException(404, "Completed analysis not found")
+    try:
+        index = int(body.get("finding_index", -1))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "finding_index must be an integer")
+    try:
+        return _explain(a["report"], index)
+    except IndexError:
+        raise HTTPException(400, "finding_index out of range")
 
 
 @router.post("/correlate")
@@ -198,8 +272,17 @@ def health():
         "ai_provider": get_provider().name,
         "self_verify": settings.AI_SELF_VERIFY,
         "cache": settings.AI_CACHE,
+        "pdf_reports": report_pdf.is_available(),
+        "threat_intel": threatintel.stats(),
         "enrichment": {
             "abuseipdb": bool(settings.ABUSEIPDB_API_KEY),
             "virustotal": bool(settings.VIRUSTOTAL_API_KEY),
         },
     }
+
+
+@router.post("/threatintel/refresh")
+def threatintel_refresh(user: dict = Depends(current_user)):
+    """Pull a fresh indicator set from abuse.ch and merge it over the bundled
+    snapshot. Best-effort: returns ok=False (not an HTTP error) if offline."""
+    return threatintel.refresh_from_feeds()

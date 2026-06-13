@@ -7,6 +7,7 @@ requests>=2.31
 # Optional parsers (the pipeline runs without them; install for full support)
 python-evtx>=0.7.4   # native .evtx parsing (XML/JSONL exports work without it)
 pefile>=2023.2.7     # richer PE import tables (basic PE parsing is built-in)
+reportlab>=4.0       # server-rendered PDF reports (API returns 501 if absent)
 
 # Dev
 pytest>=8.0

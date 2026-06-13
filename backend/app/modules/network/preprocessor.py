@@ -11,6 +11,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
 from app.core.schema import Summary, Observation, TimelineEvent, IOCs
+from app.core import threatintel
 from app.modules.network.parser import Packet
 
 WELL_KNOWN = {80: "HTTP", 443: "HTTPS", 53: "DNS", 22: "SSH", 25: "SMTP", 21: "FTP",
@@ -20,13 +21,9 @@ WELL_KNOWN = {80: "HTTP", 443: "HTTPS", 53: "DNS", 22: "SSH", 25: "SMTP", 21: "F
 PRIVATE_PREFIXES = ("10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.",
                     "172.2", "172.30.", "172.31.", "127.", "169.254.")
 
-# A tiny illustrative JA3 blocklist. In production this is fed from a threat-intel
-# feed (e.g. abuse.ch JA3 fingerprints); kept small here for the demo.
-KNOWN_BAD_JA3 = {
-    "a0e9f5d64349fb13191bc781f81f42e1": "Cobalt Strike (default profile)",
-    "72a589da586844d7f0818ce684948eea": "Metasploit Meterpreter",
-    "e7d705a3286e19ea42f587b344ee6865": "Tor client",
-}
+# JA3 fingerprints, known-bad IPs, and domains now come from the threat-intel
+# feed (app/core/threatintel.py) — a bundled offline snapshot that can be
+# refreshed live from abuse.ch — instead of a hardcoded list.
 
 
 def shannon_entropy(data: bytes) -> float:
@@ -230,9 +227,35 @@ def preprocess(packets: list[Packet], source_file: str) -> Summary:
             if flow["sni"] and flow["sni"] not in summary.iocs.domains:
                 summary.iocs.domains.append(flow["sni"])
 
+        # Known-bad external IP from the threat-intel feed
+        if not is_private(dst):
+            ip_label = threatintel.ip_label(dst)
+            if ip_label:
+                summary.observations.append(new_obs(
+                    type="known_bad_ip",
+                    description=(f"Traffic to {dst}:{dport} — flagged by threat intel: "
+                                f"{ip_label}"),
+                    severity_hint="high",
+                    data={"dst": dst, "port": dport, "intel": ip_label,
+                          "bytes": flow["bytes"]},
+                    mitre_hints=["T1071"],
+                ))
+
+        # Known-bad domain (SNI or DNS) from the threat-intel feed
+        intel_domain = threatintel.domain_label(flow["sni"])
+        if intel_domain:
+            summary.observations.append(new_obs(
+                type="known_bad_domain",
+                description=(f"TLS connection to {flow['sni']} — flagged by threat "
+                            f"intel: {intel_domain}"),
+                severity_hint="high",
+                data={"domain": flow["sni"], "dst": dst, "intel": intel_domain},
+                mitre_hints=["T1071", "T1568"],
+            ))
+
         # JA3 fingerprint of known-malicious tooling
         if flow["ja3"]:
-            label = KNOWN_BAD_JA3.get(flow["ja3"])
+            label = threatintel.ja3_label(flow["ja3"])
             if label:
                 summary.observations.append(new_obs(
                     type="malicious_ja3",
@@ -294,6 +317,27 @@ def preprocess(packets: list[Packet], source_file: str) -> Summary:
                 data={"src": src, "dst": dst, "ports_touched": len(ports)},
                 mitre_hints=["T1046"],
             ))
+
+    # Known-bad domains (threat-intel feed) seen in DNS queries. Group hits by
+    # the flagged parent so a tunnel with hundreds of random subdomains yields
+    # one observation (with a count + examples), not hundreds.
+    bad_domain_hits: dict[str, list[str]] = defaultdict(list)
+    bad_domain_intel: dict[str, str] = {}
+    for name in sorted(set(all_dns)):
+        intel = threatintel.domain_label(name)
+        if intel:
+            bad_domain_intel[intel] = intel
+            bad_domain_hits[intel].append(name)
+    for intel, names in bad_domain_hits.items():
+        examples = ", ".join(names[:3]) + (" …" if len(names) > 3 else "")
+        summary.observations.append(new_obs(
+            type="known_bad_domain",
+            description=(f"{len(names)} DNS quer{'y' if len(names) == 1 else 'ies'} to "
+                        f"threat-intel-flagged infrastructure ({intel}): {examples}"),
+            severity_hint="high",
+            data={"intel": intel, "query_count": len(names), "examples": names[:10]},
+            mitre_hints=["T1071.004", "T1568"],
+        ))
 
     # DNS anomalies: long/random-looking names (DGA), excessive TXT-length queries
     for name in set(all_dns):

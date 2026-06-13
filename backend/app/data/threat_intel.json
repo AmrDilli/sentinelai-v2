@@ -1,0 +1,24 @@
+{
+  "_comment": "Bundled offline threat-intel snapshot. Ships with the app so detections work with zero network/keys. Optionally refreshed at runtime from abuse.ch (see app/core/threatintel.py refresh_from_feeds). The bundled malicious indicators below include those used by samples/generate_samples.py so the demo lights up out of the box.",
+  "version": "2026.06.1",
+  "source": "bundled",
+  "ja3": {
+    "a0e9f5d64349fb13191bc781f81f42e1": "Cobalt Strike (default profile)",
+    "72a589da586844d7f0818ce684948eea": "Metasploit Meterpreter",
+    "e7d705a3286e19ea42f587b344ee6865": "Tor client",
+    "6734f37431670b3ab4292b8f60f29984": "Trickbot loader",
+    "51c64c77e60f3980eea90869b68c58a8": "Emotet / generic malware TLS"
+  },
+  "ips": {
+    "45.133.1.99": "Known C2 — Cobalt Strike team server (bundled sample)",
+    "185.220.101.0": "Tor exit node range",
+    "193.142.146.35": "Feodo/Emotet botnet C2",
+    "5.42.92.0": "Bulletproof hosting — malware staging"
+  },
+  "domains": {
+    "evil-c2-domain.xyz": "C2 callback domain (bundled sample)",
+    "tunnel-exfil.net": "DNS tunneling / exfiltration parent (bundled sample)",
+    "secure-update-check.com": "Fake update lure — malware delivery",
+    "cdn-analytics-tracker.ru": "Skimmer / data-theft infrastructure"
+  }
+}
