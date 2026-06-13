@@ -355,6 +355,17 @@ select { font-family: var(--font-body); }
 .finding .mitre-tags { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
 .mitre-tag { font-size: 10px; background: color-mix(in srgb, var(--accent) 9%, transparent); color: var(--accent); padding: 2px 7px; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
 .finding ul { margin: 8px 0 0 18px; color: var(--text-dim); font-size: 12px; line-height: 1.6; }
+.explain-btn { margin-left: auto; font-size: 11px; padding: 4px 10px; }
+.explain-box {
+  margin-top: 10px; padding: 12px 14px; border-radius: 8px;
+  background: color-mix(in srgb, var(--brand) 7%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);
+  border-left: 3px solid var(--brand);
+  animation: fade 0.25s ease;
+}
+.explain-box.err { background: color-mix(in srgb, var(--critical) 8%, var(--panel)); border-color: var(--critical); border-left-color: var(--critical); }
+.explain-box p { color: var(--text-dim); font-size: 12.5px; line-height: 1.6; margin: 0 0 4px; }
+.explain-box p:not(:first-child) { margin-top: 2px; }
 
 /* =========================== Timeline =========================== */
 .timeline { max-height: 360px; overflow-y: auto; padding-left: 4px; }

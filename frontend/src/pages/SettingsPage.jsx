@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { IconChip, IconCloud, IconNetwork, IconShield, IconCheck } from "../components/icons.jsx";
+import { refreshThreatIntel } from "../api/client.js";
 
 function Integration({ Icon, color, name, desc, connected, detail }) {
   return (
@@ -20,9 +21,29 @@ function Integration({ Icon, color, name, desc, connected, detail }) {
   );
 }
 
-export default function SettingsPage({ health }) {
+export default function SettingsPage({ health, toast }) {
   const provider = health?.ai_provider || "mock";
   const aiConnected = provider !== "mock";
+
+  const [intel, setIntel] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const ti = intel || health?.threat_intel || {};
+
+  const doRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await refreshThreatIntel();
+      setIntel(res);
+      toast?.(res.ok === false
+        ? `Threat-intel refresh failed: ${res.error || "offline"}`
+        : `Threat intel updated — ${res.ja3} JA3, ${res.ips} IPs, ${res.domains} domains`,
+        res.ok === false ? "critical" : "success");
+    } catch (e) {
+      toast?.(e.message, "critical");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <div className="view-enter">
@@ -63,6 +84,29 @@ export default function SettingsPage({ health }) {
         <Integration Icon={IconCloud} color="#38bdf8" name="IP Geolocation"
           desc="Keyless geolocation (ip-api.com) — powers the world map."
           connected detail="keyless" />
+      </div>
+
+      <div className="card" style={{ marginTop: 24 }}>
+        <div className="card-title">
+          Threat-Intelligence Feed
+          <span className="h2-actions">
+            <button className="btn sm primary" onClick={doRefresh} disabled={refreshing}>
+              {refreshing ? "Refreshing…" : "Refresh from abuse.ch"}
+            </button>
+          </span>
+        </div>
+        <p className="dim" style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 12 }}>
+          JA3 fingerprints and known-bad IPs/domains power the network module's
+          highest-confidence detections. Ships with a bundled offline snapshot
+          (source: <b>{ti.source || "bundled"}</b>, v{ti.version || "—"}) and can pull
+          live indicators from abuse.ch on demand.
+          {ti.last_updated ? ` Last live refresh: ${ti.last_updated}.` : ""}
+        </p>
+        <div className="stat-row">
+          <div className="stat-box"><div className="stat-val">{ti.ja3 ?? "—"}</div><div className="stat-lbl">JA3 fingerprints</div></div>
+          <div className="stat-box"><div className="stat-val">{ti.ips ?? "—"}</div><div className="stat-lbl">Known-bad IPs</div></div>
+          <div className="stat-box"><div className="stat-val">{ti.domains ?? "—"}</div><div className="stat-lbl">Known-bad domains</div></div>
+        </div>
       </div>
 
       <div className="card" style={{ marginTop: 24 }}>

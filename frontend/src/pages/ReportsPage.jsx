@@ -1,5 +1,5 @@
 import React from "react";
-import { exportJSON, exportPDF } from "../api/export.js";
+import { exportJSON, exportServerPDF } from "../api/export.js";
 import { IconReport } from "../components/icons.jsx";
 
 const SEV_COLOR = { info: "#64748b", low: "#38bdf8", medium: "#f59e0b", high: "#f97316", critical: "#ef4444" };
@@ -29,7 +29,7 @@ export default function ReportsPage({ analyses, onOpen }) {
                   <td>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button className="btn sm" onClick={() => exportJSON(a.report)}>JSON</button>
-                      <button className="btn sm" onClick={() => exportPDF(a.report)}>PDF</button>
+                      <button className="btn sm" onClick={() => exportServerPDF(a.id, a.report)}>PDF</button>
                     </div>
                   </td>
                 </tr>

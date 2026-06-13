@@ -53,33 +53,55 @@ export default function App() {
     me().then(setUser).catch(() => setUser(null)).finally(() => setAuthChecked(true));
   }, []);
 
-  const refresh = useCallback(async () => {
-    try {
-      const list = await listAnalyses();
-      for (const a of list) {
-        const prev = seen.current[a.id];
-        if (prev && prev !== a.status) {
-          if (a.status === "completed") {
-            const sev = a.severity || "info";
-            toast(`${a.filename}: ${sev.toUpperCase()} — analysis complete`,
-              ["high", "critical"].includes(sev) ? "critical" : "success");
-          } else if (a.status === "failed") {
-            toast(`${a.filename}: analysis failed`, "critical");
-          }
+  // Apply a fresh analyses list: fire status-change toasts, then store it.
+  const applyList = useCallback((list) => {
+    for (const a of list) {
+      const prev = seen.current[a.id];
+      if (prev && prev !== a.status) {
+        if (a.status === "completed") {
+          const sev = a.severity || "info";
+          toast(`${a.filename}: ${sev.toUpperCase()} — analysis complete`,
+            ["high", "critical"].includes(sev) ? "critical" : "success");
+        } else if (a.status === "failed") {
+          toast(`${a.filename}: analysis failed`, "critical");
         }
-        seen.current[a.id] = a.status;
       }
-      setAnalyses(list);
-    } catch { /* backend not up */ }
+      seen.current[a.id] = a.status;
+    }
+    setAnalyses(list);
   }, [toast]);
+
+  const refresh = useCallback(async () => {
+    try { applyList(await listAnalyses()); } catch { /* backend not up */ }
+  }, [applyList]);
 
   useEffect(() => {
     if (!user) return;
     refresh();
     fetch("/api/health").then((r) => r.json()).then(setHealth).catch(() => {});
-    const t = setInterval(refresh, 2000);
-    return () => clearInterval(t);
-  }, [refresh, user]);
+
+    // Prefer a live WebSocket stream; fall back to polling if it drops.
+    let ws, poll = null, stopped = false;
+    const startPolling = () => { if (!poll) poll = setInterval(refresh, 2500); };
+    const stopPolling = () => { if (poll) { clearInterval(poll); poll = null; } };
+    const connectWS = () => {
+      if (stopped) return;
+      try {
+        const proto = location.protocol === "https:" ? "wss" : "ws";
+        ws = new WebSocket(
+          `${proto}://${location.host}/api/ws/analyses?token=${encodeURIComponent(getToken())}`);
+        ws.onmessage = (e) => {
+          try { const d = JSON.parse(e.data); if (d.analyses) { applyList(d.analyses); stopPolling(); } }
+          catch { /* ignore malformed frame */ }
+        };
+        ws.onclose = () => { if (!stopped) { startPolling(); setTimeout(connectWS, 4000); } };
+        ws.onerror = () => { try { ws.close(); } catch { /* noop */ } };
+      } catch { startPolling(); }
+    };
+    startPolling();   // immediate fallback; WS clears it on first message
+    connectWS();
+    return () => { stopped = true; stopPolling(); try { ws && ws.close(); } catch { /* noop */ } };
+  }, [refresh, applyList, user]);
 
   const handleLogout = async () => {
     await apiLogout();
@@ -139,7 +161,7 @@ export default function App() {
           )}
           {view === "trends" && <TrendsPage analyses={visible} />}
           {view === "reports" && <ReportsPage analyses={visible} onOpen={openCase} />}
-          {view === "settings" && <SettingsPage health={health} />}
+          {view === "settings" && <SettingsPage health={health} toast={toast} />}
         </div>
       </div>
     </div>

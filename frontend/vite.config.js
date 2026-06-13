@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    proxy: { "/api": "http://localhost:8000" },
+    // `ws: true` proxies the /api/ws/analyses live-progress WebSocket too.
+    proxy: { "/api": { target: "http://localhost:8000", ws: true } },
   },
 });

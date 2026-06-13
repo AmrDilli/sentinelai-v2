@@ -1,8 +1,22 @@
-// Client-side report export — no backend needed.
+// Report export helpers.
+import { fetchReportPDF } from "./client.js";
 
 export function exportJSON(report) {
   const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
   download(blob, `sentinelai_${report.module}_${report.source_file}.json`);
+}
+
+// Primary PDF path: download the server-rendered, branded ReportLab PDF.
+// Falls back to the in-browser print view if the server can't produce one
+// (e.g. reportlab not installed → 501), so the button always does something.
+export async function exportServerPDF(analysisId, report, toast) {
+  try {
+    const blob = await fetchReportPDF(analysisId);
+    download(blob, `sentinelai_${report.module}_${report.source_file}.pdf`);
+  } catch (e) {
+    toast?.("Server PDF unavailable — opening printable view", "info");
+    exportPDF(report);
+  }
 }
 
 // "PDF" via the browser print dialog (Save as PDF) over a clean printable view.

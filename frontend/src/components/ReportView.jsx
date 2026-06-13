@@ -9,7 +9,7 @@ import Playbook from "./Playbook.jsx";
 import SoarPanel from "./SoarPanel.jsx";
 import GeoMap from "./GeoMap.jsx";
 import IOCTables from "./IOCTables.jsx";
-import { exportJSON, exportPDF } from "../api/export.js";
+import { exportJSON, exportServerPDF } from "../api/export.js";
 
 export default function ReportView({ analysis, onChanged }) {
   if (analysis.status === "failed") {
@@ -38,7 +38,7 @@ export default function ReportView({ analysis, onChanged }) {
           Threat Overview
           <span className="h2-actions">
             <button className="btn sm" onClick={() => exportJSON(r)}>⤓ JSON</button>
-            <button className="btn sm" onClick={() => exportPDF(r)}>⤓ PDF</button>
+            <button className="btn sm" onClick={() => exportServerPDF(analysis.id, r)}>⤓ PDF</button>
           </span>
         </div>
         <div className="overview-flex">
@@ -65,7 +65,7 @@ export default function ReportView({ analysis, onChanged }) {
         <StatsCharts summary={r.summary} /></div>
 
       <div className="card full"><div className="card-title">Findings</div>
-        <Findings findings={r.findings} /></div>
+        <Findings findings={r.findings} analysisId={analysis.id} /></div>
 
       {r.module === "network" && (
         <div className="card full"><div className="card-title">Connection Geography</div>

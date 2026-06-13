@@ -71,3 +71,25 @@ export async function approveAction(analysisId, actionIndex) {
 export async function deleteAnalysis(id) {
   return asJson(await fetch(`${BASE}/analyses/${id}`, { method: "DELETE", headers: authHeaders() }));
 }
+export async function explainFinding(analysisId, findingIndex) {
+  return asJson(await fetch(`${BASE}/analyses/${analysisId}/explain`, {
+    method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ finding_index: findingIndex }),
+  }));
+}
+export async function refreshThreatIntel() {
+  return asJson(await fetch(`${BASE}/threatintel/refresh`, { method: "POST", headers: authHeaders() }));
+}
+// Fetch the server-rendered PDF for an analysis as a Blob. Auth lives in a
+// header, so a plain <a download> can't be used — stream it then save.
+export async function fetchReportPDF(id) {
+  const res = await fetch(`${BASE}/analyses/${id}/report.pdf`, { headers: authHeaders() });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { detail = (await res.json()).detail || detail; } catch { /* not json */ }
+    const err = new Error(detail);
+    err.status = res.status;
+    throw err;
+  }
+  return res.blob();
+}
