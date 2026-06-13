@@ -61,27 +61,41 @@ def build_summary(path: str, module: str, enable_enrichment: bool = True) -> Sum
 
 
 def run_analysis(path: str, module: str | None = None,
-                 enable_enrichment: bool = True) -> Report:
-    """Full pipeline for one file."""
+                 enable_enrichment: bool = True,
+                 progress_cb=None, analysis_id: str | None = None) -> Report:
+    """Full pipeline for one file. `progress_cb(percent:int, stage:str)` is called
+    as each stage completes so the UI can show a live progress bar."""
     module = module or detect_module(path)
-    analysis_id = uuid.uuid4().hex[:12]
+    analysis_id = analysis_id or uuid.uuid4().hex[:12]
+
+    def progress(pct, stage):
+        if progress_cb:
+            try:
+                progress_cb(pct, stage)
+            except Exception:
+                pass
 
     # Stages 1-2: parse + pre-process (+ threat intel)
+    progress(10, "Parsing & pre-processing")
     summary = build_summary(path, module, enable_enrichment)
+    progress(45, "AI analysis")
 
     # Stage 3: AI reads the SUMMARY, never the raw file
     ai_result = analyze(summary)
     findings = ai_result["findings"]
+    progress(75, "Scoring & MITRE mapping")
 
     # Stage 4: scoring
     score, severity, distribution = score_findings(findings)
 
     # Stage 5: playbook (single-module here; /correlate does cross-module)
+    progress(85, "Generating playbook")
     playbook = generate_playbook([{
         "module": module, "findings": findings, "narrative": ai_result["narrative"],
     }])
 
     # Stage 6: tiered response actions
+    progress(95, "Response actions")
     actions = soar.generate_actions(findings, summary.to_dict()["iocs"], score)
 
     return Report(
@@ -98,6 +112,8 @@ def run_analysis(path: str, module: str | None = None,
         playbook=playbook,
         soar_actions=actions,
         ai_provider=ai_result["ai_provider"],
+        usage=ai_result.get("usage", {}),
+        cached=ai_result.get("cached", False),
     )
 
 
@@ -130,10 +146,16 @@ def correlate(reports: list[Report]) -> dict:
     }
 
 
-def safe_run(path: str, module: str | None = None) -> dict:
+def safe_run(path: str, module: str | None = None, progress_cb=None,
+             analysis_id: str | None = None) -> dict:
     """Wrapper that converts failures into an error report dict (API-friendly)."""
     try:
-        return {"status": "completed", "report": run_analysis(path, module).to_dict()}
-    except Exception as exc:
-        return {"status": "failed", "error": str(exc),
+        report = run_analysis(path, module, progress_cb=progress_cb, analysis_id=analysis_id)
+        return {"status": "completed", "progress": 100, "stage": "Done",
+                "report": report.to_dict()}
+    except ValueError as exc:  # expected, user-facing (bad file, wrong format)
+        return {"status": "failed", "progress": 100, "stage": "Failed", "error": str(exc)}
+    except Exception as exc:   # unexpected
+        return {"status": "failed", "progress": 100, "stage": "Failed",
+                "error": f"{type(exc).__name__}: {exc}",
                 "traceback": traceback.format_exc(limit=3)}
