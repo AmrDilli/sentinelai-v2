@@ -6,10 +6,10 @@ import Playbook from "./Playbook.jsx";
 
 export default function CorrelatedView({ data }) {
   return (
-    <div className="report-grid">
-      <div className="panel full">
-        <h2>Unified Investigation — {data.source_files.join(" + ")}</h2>
-        <div className="score-row">
+    <div className="report-grid stagger">
+      <div className="card full">
+        <div className="card-title">Unified Investigation — {data.source_files.join(" + ")}</div>
+        <div className="overview-flex">
           <ScoreGauge score={data.score} severity={data.severity} />
           <div className="overview-meta">
             <span className={`badge ${data.severity}`}>{data.severity}</span>
@@ -18,23 +18,17 @@ export default function CorrelatedView({ data }) {
           </div>
         </div>
         {Object.entries(data.narratives).map(([mod, n]) => (
-          <p key={mod} className="narrative">
-            <strong style={{ textTransform: "uppercase", color: "#22d3ee" }}>{mod}</strong> — {n}
+          <p key={mod} className="narrative" style={{ marginTop: 10 }}>
+            <strong style={{ textTransform: "uppercase", color: "var(--brand)" }}>{mod}</strong> — {n}
           </p>
         ))}
       </div>
-      <div className="panel">
-        <h2>Combined Severity</h2>
-        <SeverityChart distribution={data.severity_distribution} />
-      </div>
-      <div className="panel">
-        <h2>Combined MITRE ATT&amp;CK</h2>
-        <MitreMatrix matrix={data.mitre} />
-      </div>
-      <div className="panel full">
-        <h2>Unified Cross-Module Playbook</h2>
-        <Playbook steps={data.playbook} />
-      </div>
+      <div className="card"><div className="card-title">Combined Severity</div>
+        <SeverityChart distribution={data.severity_distribution} /></div>
+      <div className="card"><div className="card-title">Combined MITRE ATT&amp;CK</div>
+        <MitreMatrix matrix={data.mitre} /></div>
+      <div className="card full"><div className="card-title">Unified Cross-Module Playbook</div>
+        <Playbook steps={data.playbook} /></div>
     </div>
   );
 }

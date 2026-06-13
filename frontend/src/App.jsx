@@ -1,116 +1,145 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { listAnalyses, getAnalysis, correlate } from "./api/client.js";
-import UploadPanel from "./components/UploadPanel.jsx";
-import AnalysisList from "./components/AnalysisList.jsx";
-import ReportView from "./components/ReportView.jsx";
-import CorrelatedView from "./components/CorrelatedView.jsx";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { listAnalyses, getAnalysis, correlate, me, logout as apiLogout, getToken } from "./api/client.js";
+import { useToast } from "./components/Toast.jsx";
+import { useTheme } from "./useTheme.js";
+import AuthScreen from "./components/AuthScreen.jsx";
+import CommandPalette from "./components/CommandPalette.jsx";
+import Sidebar from "./components/Sidebar.jsx";
+import Topbar from "./components/Topbar.jsx";
 
-function Clock() {
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  return <span className="clock">{now.toISOString().slice(0, 19).replace("T", " ")} UTC</span>;
+const VIEWS = [
+  { id: "dashboard", label: "Dashboard" }, { id: "alerts", label: "Alerts" },
+  { id: "investigations", label: "Investigations" }, { id: "trends", label: "Trends" },
+  { id: "reports", label: "Reports" }, { id: "settings", label: "Settings" },
+];
+// Global time-filter windows (used by the Topbar dropdown).
+const TIME_WINDOWS_MS = { "Last 24 Hours": 24 * 3600e3, "Last 7 Days": 7 * 24 * 3600e3 };
+function withinTimeWindow(analyses, filter) {
+  const span = TIME_WINDOWS_MS[filter];
+  if (!span) return analyses; // "All Time"
+  const cutoff = Date.now() - span;
+  return analyses.filter((a) => {
+    if (a.status !== "completed") return true; // keep in-progress / failed visible
+    const t = a.generated_at ? Date.parse(a.generated_at) : NaN;
+    return Number.isNaN(t) || t >= cutoff;
+  });
 }
 
+import DashboardPage from "./pages/DashboardPage.jsx";
+import AlertsPage from "./pages/AlertsPage.jsx";
+import InvestigationsPage from "./pages/InvestigationsPage.jsx";
+import TrendsPage from "./pages/TrendsPage.jsx";
+import ReportsPage from "./pages/ReportsPage.jsx";
+import SettingsPage from "./pages/SettingsPage.jsx";
+
 export default function App() {
+  const toast = useToast();
+  const { theme, toggle } = useTheme();
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [view, setView] = useState("dashboard");
   const [analyses, setAnalyses] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [report, setReport] = useState(null);
   const [checked, setChecked] = useState([]);
   const [correlated, setCorrelated] = useState(null);
-  const [error, setError] = useState("");
   const [health, setHealth] = useState(null);
+  const [timeFilter, setTimeFilter] = useState("All Time");
+  const seen = useRef({});
+
+  // Restore session on load if a token exists.
+  useEffect(() => {
+    if (!getToken()) { setAuthChecked(true); return; }
+    me().then(setUser).catch(() => setUser(null)).finally(() => setAuthChecked(true));
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
-      setAnalyses(await listAnalyses());
-    } catch {
-      /* backend not up yet */
-    }
-  }, []);
+      const list = await listAnalyses();
+      for (const a of list) {
+        const prev = seen.current[a.id];
+        if (prev && prev !== a.status) {
+          if (a.status === "completed") {
+            const sev = a.severity || "info";
+            toast(`${a.filename}: ${sev.toUpperCase()} — analysis complete`,
+              ["high", "critical"].includes(sev) ? "critical" : "success");
+          } else if (a.status === "failed") {
+            toast(`${a.filename}: analysis failed`, "critical");
+          }
+        }
+        seen.current[a.id] = a.status;
+      }
+      setAnalyses(list);
+    } catch { /* backend not up */ }
+  }, [toast]);
 
   useEffect(() => {
+    if (!user) return;
     refresh();
     fetch("/api/health").then((r) => r.json()).then(setHealth).catch(() => {});
-    const t = setInterval(refresh, 2500);
+    const t = setInterval(refresh, 2000);
     return () => clearInterval(t);
-  }, [refresh]);
+  }, [refresh, user]);
+
+  const handleLogout = async () => {
+    await apiLogout();
+    setUser(null); setAnalyses([]); setSelectedId(null); setReport(null);
+    setChecked([]); setCorrelated(null); seen.current = {}; setView("dashboard");
+    toast("Signed out", "info");
+  };
 
   useEffect(() => {
-    if (!selectedId) return;
-    setCorrelated(null);
+    if (!selectedId) { setReport(null); return; }
     getAnalysis(selectedId).then(setReport).catch(() => setReport(null));
   }, [selectedId, analyses]);
 
+  const openCase = (id) => { setCorrelated(null); setSelectedId(id); setView("investigations"); };
+
   const runCorrelation = async () => {
-    setError("");
     try {
       setCorrelated(await correlate(checked));
-      setReport(null);
-      setSelectedId(null);
-    } catch (e) {
-      setError(e.message);
-    }
+      setReport(null); setSelectedId(null);
+      toast(`Correlated ${checked.length} cases`, "success");
+    } catch (e) { toast(e.message, "critical"); }
   };
 
-  const running = analyses.some((a) => a.status === "running");
+  const onDeleted = (id) => {
+    if (selectedId === id) { setSelectedId(null); setReport(null); }
+    setChecked((c) => c.filter((x) => x !== id));
+    refresh();
+  };
+
+  // Apply the global time filter to everything the aggregate views render.
+  const visible = useMemo(() => withinTimeWindow(analyses, timeFilter), [analyses, timeFilter]);
+  const alertCount = visible.filter((a) => a.status === "completed").length;
+
+  if (!authChecked) return <div className="boot">Loading…</div>;
+  if (!user) return <AuthScreen onAuthed={setUser} />;
 
   return (
-    <div className="app">
-      <div className="header">
-        <h1>Sentinel<span>AI</span></h1>
-        <span className="tag">v2 · Triage &amp; Response Console</span>
-        <div className="spacer" />
-        <div className="statuslight">
-          <span className={`dot ${health ? "" : "off"}`} />
-          {health ? `Engine: ${health.ai_provider}` : "Backend offline"}
-        </div>
-        <div className="statuslight">
-          <span className={`dot ${running ? "" : "off"}`} />
-          {running ? "Analyzing" : "Idle"}
-        </div>
-        <Clock />
-      </div>
-
-      <div className="layout">
-        <div>
-          <UploadPanel onUploaded={refresh} />
-          <div className="panel" style={{ marginTop: 16 }}>
-            <h2>Case Queue</h2>
-            <AnalysisList
-              analyses={analyses}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              checked={checked}
-              onCheck={setChecked}
-            />
-            {checked.length >= 2 && (
-              <div className="correlate-bar">
-                <button className="primary" onClick={runCorrelation}>
-                  Correlate {checked.length} cases
-                </button>
-              </div>
-            )}
-            {error && <div className="error-box" style={{ marginTop: 8 }}>{error}</div>}
-          </div>
-        </div>
-        <div>
-          {correlated ? (
-            <CorrelatedView data={correlated} />
-          ) : report ? (
-            <ReportView analysis={report} onChanged={() => getAnalysis(selectedId).then(setReport)} />
-          ) : (
-            <div className="panel empty">
-              <span className="big">⌖</span>
-              AWAITING ARTIFACT
-              <br />
-              Drop a PCAP, Windows event log (.evtx / .xml / .jsonl), or suspicious
-              file to open a case. Select a case from the queue to view its report.
-              Check 2+ cases to build a unified cross-module investigation.
-            </div>
+    <div className="shell">
+      <CommandPalette analyses={analyses} views={VIEWS} onOpen={openCase}
+        setView={(v) => { setView(v); setCorrelated(null); }} />
+      <Sidebar view={view} setView={(v) => { setView(v); setCorrelated(null); }}
+        alertCount={alertCount} theme={theme} toggleTheme={toggle} />
+      <div className="main">
+        <Topbar analyses={visible} backendUp={!!health} timeFilter={timeFilter}
+          setTimeFilter={setTimeFilter} user={user} onLogout={handleLogout} />
+        <div className="content">
+          {view === "dashboard" && <DashboardPage analyses={visible} onOpen={openCase} />}
+          {view === "alerts" && <AlertsPage analyses={visible} onUploaded={refresh} onOpen={openCase} toast={toast} />}
+          {view === "investigations" && (
+            <InvestigationsPage
+              analyses={visible} selectedId={selectedId} report={report}
+              correlated={correlated} checked={checked}
+              onSelect={(id) => { setCorrelated(null); setSelectedId(id); }}
+              onCheck={setChecked} onCorrelate={runCorrelation}
+              onUploaded={refresh} onChanged={() => getAnalysis(selectedId).then(setReport)}
+              onDeleted={onDeleted} toast={toast} />
           )}
+          {view === "trends" && <TrendsPage analyses={visible} />}
+          {view === "reports" && <ReportsPage analyses={visible} onOpen={openCase} />}
+          {view === "settings" && <SettingsPage health={health} />}
         </div>
       </div>
     </div>

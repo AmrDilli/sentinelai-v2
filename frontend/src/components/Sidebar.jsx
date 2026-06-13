@@ -1,0 +1,48 @@
+import React from "react";
+import {
+  IconDashboard, IconAlert, IconSearch, IconTrend, IconReport,
+  IconSettings, IconShield, IconSun, IconMoon,
+} from "./icons.jsx";
+
+const NAV = [
+  { id: "dashboard", label: "Dashboard", Icon: IconDashboard },
+  { id: "alerts", label: "Alerts", Icon: IconAlert },
+  { id: "investigations", label: "Investigations", Icon: IconSearch },
+  { id: "trends", label: "Trends", Icon: IconTrend },
+  { id: "reports", label: "Reports", Icon: IconReport },
+];
+
+export default function Sidebar({ view, setView, alertCount, theme, toggleTheme }) {
+  return (
+    <aside className="sidebar">
+      <div className="brand">
+        <div className="brand-logo"><IconShield size={22} /></div>
+        <div className="brand-name">Sentinel<span>AI</span></div>
+      </div>
+
+      <nav className="nav">
+        {NAV.map(({ id, label, Icon }) => (
+          <div key={id} className={`nav-item ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
+            <Icon />
+            <span>{label}</span>
+            {id === "alerts" && alertCount > 0 && <span className="nav-count">{alertCount}</span>}
+          </div>
+        ))}
+      </nav>
+
+      <div className="nav-spacer" />
+
+      <nav className="nav">
+        <div className={`nav-item ${view === "settings" ? "active" : ""}`} onClick={() => setView("settings")}>
+          <IconSettings /><span>Settings</span>
+        </div>
+      </nav>
+
+      <div className={`theme-toggle ${theme}`} onClick={toggleTheme} title="Toggle light / dark">
+        <div className="tt-knob"><span>{theme === "dark" ? <IconMoon size={14} /> : <IconSun size={14} />}</span></div>
+        <span className="tt-ico sun"><IconSun size={14} /></span>
+        <span className="tt-ico moon"><IconMoon size={14} /></span>
+      </div>
+    </aside>
+  );
+}
