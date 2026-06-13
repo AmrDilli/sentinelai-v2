@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
+from app.core import store, auth
 
 app = FastAPI(
     title="SentinelAI v2",
@@ -24,6 +25,12 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+
+
+@app.on_event("startup")
+def _startup():
+    store.init_db()
+    auth.init_auth()
 
 
 @app.get("/")

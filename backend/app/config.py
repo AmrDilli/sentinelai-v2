@@ -30,6 +30,13 @@ class Settings:
     MAX_UPLOAD_MB: int = int(os.getenv("MAX_UPLOAD_MB", "200"))
     MAX_OBSERVATIONS_TO_AI: int = int(os.getenv("MAX_OBSERVATIONS_TO_AI", "80"))
 
+    # AI quality toggles
+    AI_SELF_VERIFY: bool = os.getenv("AI_SELF_VERIFY", "0") not in ("0", "false", "False", "")
+    AI_CACHE: bool = os.getenv("AI_CACHE", "1") not in ("0", "false", "False", "")
+
+    # Persistence (SQLite path; cases survive restart)
+    DB_PATH: str = os.getenv("DB_PATH", str(Path(os.getenv("UPLOAD_DIR", "/tmp/sentinelai_uploads")) / "sentinelai.db"))
+
     # SOAR thresholds (0-100 score)
     SOAR_NOTIFY_THRESHOLD: int = 1     # low
     SOAR_APPROVAL_THRESHOLD: int = 40  # medium

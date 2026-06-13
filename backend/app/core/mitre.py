@@ -69,6 +69,8 @@ TECHNIQUES = {
     "T1204": ("User Execution", ["TA0002"]),
     "T1566": ("Phishing", ["TA0001"]),
     "T1190": ("Exploit Public-Facing Application", ["TA0001"]),
+    "T1003": ("OS Credential Dumping", ["TA0006"]),
+    "T1110.003": ("Password Spraying", ["TA0006"]),
 }
 
 
@@ -91,6 +93,10 @@ def build_matrix(findings: list[dict]) -> list[dict]:
     """Group all techniques referenced by findings into a tactic -> techniques
     structure the dashboard renders as an ATT&CK matrix."""
     tactic_map: dict[str, dict] = {}
+    # Track which technique ids we've already placed under each tactic, and which
+    # findings reference each technique, so the UI can show one chip per technique
+    # with the count of supporting findings rather than duplicates.
+    seen: dict[tuple, dict] = {}
     for finding in findings:
         techniques = finding.get("mitre_techniques", []) or []
         explicit_tactics = finding.get("mitre_tactics", []) or []
@@ -99,8 +105,13 @@ def build_matrix(findings: list[dict]) -> list[dict]:
                 bucket = tactic_map.setdefault(
                     ta, {"tactic_id": ta, "tactic_name": TACTICS.get(ta, ta), "techniques": []}
                 )
-                tech = {"id": tid, "name": technique_name(tid), "finding": finding.get("title", "")}
-                if tech not in bucket["techniques"]:
+                key = (ta, tid)
+                if key in seen:
+                    seen[key]["findings"].append(finding.get("title", ""))
+                else:
+                    tech = {"id": tid, "name": technique_name(tid),
+                            "findings": [finding.get("title", "")]}
+                    seen[key] = tech
                     bucket["techniques"].append(tech)
         for ta in explicit_tactics:
             tactic_map.setdefault(

@@ -102,6 +102,8 @@ class Report:
     soar_actions: list[dict]        # tiered response actions
     generated_at: str = field(default_factory=now_iso)
     ai_provider: str = "mock"
+    usage: dict = field(default_factory=dict)   # token + cost accounting
+    cached: bool = False                         # served from AI response cache
 
     def to_dict(self) -> dict:
         return asdict(self)
