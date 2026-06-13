@@ -175,6 +175,71 @@ def preprocess(events: list[LogEvent], source_file: str) -> Summary:
             mitre_hints=["T1070.001"],
         ))
 
+    # 3b. Defender tampering then malware (or vice-versa)
+    defender_off = next((e for e in events if e.event_id == 5001), None)
+    if defender_off:
+        summary.observations.append(new_obs(
+            type="defense_evasion",
+            description=(f"Microsoft Defender real-time protection was disabled at "
+                         f"{defender_off.timestamp} — attackers commonly do this before "
+                         "deploying payloads"),
+            severity_hint="high",
+            data={"time": defender_off.timestamp,
+                  "by": defender_off.data.get("SubjectUserName", "?")},
+            timestamps=[defender_off.timestamp],
+            mitre_hints=["T1562.001"],
+        ))
+
+    # 5. RDP lateral movement: external/unusual IP driving an interactive (type 10) logon
+    rdp_logons = [e for e in events if e.event_id == 4624
+                  and e.data.get("LogonType") == "10"]
+    ext_rdp = [e for e in rdp_logons
+               if e.data.get("IpAddress") and not e.data["IpAddress"].startswith(
+                   ("10.", "192.168.", "172.", "127.", "-", "::1"))]
+    if ext_rdp:
+        summary.observations.append(new_obs(
+            type="rdp_lateral_movement",
+            description=(f"{len(ext_rdp)} interactive RDP logon(s) from non-local IP(s) "
+                         f"({', '.join(sorted({e.data['IpAddress'] for e in ext_rdp})[:3])}) "
+                         "— possible remote/lateral access"),
+            severity_hint="high",
+            data={"count": len(ext_rdp),
+                  "source_ips": sorted({e.data["IpAddress"] for e in ext_rdp})},
+            timestamps=[ext_rdp[0].timestamp],
+            mitre_hints=["T1021.001"],
+        ))
+
+    # 6. Persistence stacking: service install + scheduled task close together
+    svc = next((e for e in events if e.event_id in (7045, 4697)), None)
+    task = next((e for e in events if e.event_id == 4698), None)
+    if svc and task:
+        summary.observations.append(new_obs(
+            type="persistence_stacking",
+            description=("Both a new service and a scheduled task were created — redundant "
+                         "persistence mechanisms, a hallmark of a deliberate intrusion"),
+            severity_hint="high",
+            data={"service": svc.data.get("ServiceName", "?"),
+                  "task": task.data.get("TaskName", "?")},
+            timestamps=[svc.timestamp, task.timestamp],
+            mitre_hints=["T1543.003", "T1053.005"],
+        ))
+
+    # 7. Password-spray: many DISTINCT accounts failing logon from one source
+    spray_by_ip: dict[str, set] = defaultdict(set)
+    for e in events:
+        if e.event_id == 4625 and e.data.get("IpAddress"):
+            spray_by_ip[e.data["IpAddress"]].add(e.data.get("TargetUserName", "?"))
+    for ip, accounts_hit in spray_by_ip.items():
+        if len(accounts_hit) >= 5:
+            summary.observations.append(new_obs(
+                type="password_spray",
+                description=(f"Source {ip} failed logons against {len(accounts_hit)} different "
+                             "accounts — password-spray pattern (one password, many users)"),
+                severity_hint="high",
+                data={"source_ip": ip, "accounts_targeted": len(accounts_hit)},
+                mitre_hints=["T1110"],
+            ))
+
     # 4. Off-hours activity (between 00:00 and 05:00 local log time)
     off_hours = [e for e in events
                  if (dt := _parse_ts(e.timestamp)) and dt.hour < 5

@@ -20,6 +20,14 @@ WELL_KNOWN = {80: "HTTP", 443: "HTTPS", 53: "DNS", 22: "SSH", 25: "SMTP", 21: "F
 PRIVATE_PREFIXES = ("10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.",
                     "172.2", "172.30.", "172.31.", "127.", "169.254.")
 
+# A tiny illustrative JA3 blocklist. In production this is fed from a threat-intel
+# feed (e.g. abuse.ch JA3 fingerprints); kept small here for the demo.
+KNOWN_BAD_JA3 = {
+    "a0e9f5d64349fb13191bc781f81f42e1": "Cobalt Strike (default profile)",
+    "72a589da586844d7f0818ce684948eea": "Metasploit Meterpreter",
+    "e7d705a3286e19ea42f587b344ee6865": "Tor client",
+}
+
 
 def shannon_entropy(data: bytes) -> float:
     if not data:
@@ -51,6 +59,7 @@ def build_flows(packets: list[Packet]) -> dict[tuple, dict]:
             "src": key[0], "sport": key[1], "dst": key[2], "dport": key[3],
             "proto": key[4], "packets": 0, "bytes": 0, "payload": b"",
             "timestamps": [], "sni": "", "tls_version": "", "dns": [],
+            "ja3": "", "http_requests": [],
         })
         flow["packets"] += 1
         flow["bytes"] += p.length
@@ -61,8 +70,49 @@ def build_flows(packets: list[Packet]) -> dict[tuple, dict]:
             flow["sni"] = p.tls_sni
         if p.tls_version:
             flow["tls_version"] = p.tls_version
+        if p.ja3:
+            flow["ja3"] = p.ja3
+        if p.http:
+            flow["http_requests"].append(p.http)
         flow["dns"].extend(p.dns_queries)
     return flows
+
+
+def merge_channels(flows: dict[tuple, dict]) -> dict[tuple, dict]:
+    """Collapse repeated connections to the same (client, server, port, proto)
+    into one logical channel.
+
+    A beaconing host opens a fresh TCP connection (new ephemeral source port)
+    on every callback, so each becomes a separate 5-tuple flow. Analysing those
+    flows individually both (a) emits one near-identical observation per
+    reconnection — noise the AI then has to wade through — and (b) can hide
+    beaconing, because no single short-lived flow has enough samples to measure
+    timing. Merging by destination channel fixes both: detectors see the full
+    picture once, and reconnection timestamps line up into the real beacon."""
+    channels: dict[tuple, dict] = {}
+    for f in flows.values():
+        key = (f["src"], f["dst"], f["dport"], f["proto"])
+        c = channels.get(key)
+        if c is None:
+            c = channels[key] = {
+                "src": f["src"], "sport": f["sport"], "dst": f["dst"],
+                "dport": f["dport"], "proto": f["proto"], "packets": 0,
+                "bytes": 0, "payload": b"", "timestamps": [], "sni": "",
+                "tls_version": "", "dns": [], "ja3": "", "http_requests": [],
+                "connections": 0,
+            }
+        c["packets"] += f["packets"]
+        c["bytes"] += f["bytes"]
+        c["timestamps"].extend(f["timestamps"])
+        if len(c["payload"]) < 65536:
+            c["payload"] += f["payload"][:65536 - len(c["payload"])]
+        c["sni"] = c["sni"] or f["sni"]
+        c["tls_version"] = c["tls_version"] or f["tls_version"]
+        c["ja3"] = c["ja3"] or f["ja3"]
+        c["http_requests"].extend(f["http_requests"])
+        c["dns"].extend(f["dns"])
+        c["connections"] += 1
+    return channels
 
 
 def preprocess(packets: list[Packet], source_file: str) -> Summary:
@@ -79,6 +129,7 @@ def preprocess(packets: list[Packet], source_file: str) -> Summary:
         return summary
 
     flows = build_flows(packets)
+    channels = merge_channels(flows)
     proto_counts = Counter(p.protocol for p in packets)
     times = [p.ts for p in packets]
     duration = max(times) - min(times) if len(times) > 1 else 0
@@ -101,9 +152,11 @@ def preprocess(packets: list[Packet], source_file: str) -> Summary:
     }
     summary.iocs = IOCs(ips=external_ips[:50], domains=sorted(set(all_dns))[:50])
 
-    # ---- Per-flow analysis -------------------------------------------------
+    # ---- Per-channel analysis ----------------------------------------------
+    # Iterate merged channels (reconnections to the same host:port collapsed)
+    # so each detector fires once per destination, not once per TCP connection.
     bytes_per_dst: dict[str, int] = defaultdict(int)
-    for flow in flows.values():
+    for flow in channels.values():
         dst, dport, proto = flow["dst"], flow["dport"], flow["proto"]
         payload_entropy = shannon_entropy(flow["payload"][:8192])
         bytes_per_dst[dst] += flow["bytes"]
@@ -116,15 +169,16 @@ def preprocess(packets: list[Packet], source_file: str) -> Summary:
                 mean = sum(intervals) / len(intervals)
                 stdev = (sum((x - mean) ** 2 for x in intervals) / len(intervals)) ** 0.5
                 if mean > 1 and stdev / mean < 0.25:  # low jitter = machine-like
+                    callbacks = flow.get("connections", len(flow_ts))
                     summary.observations.append(new_obs(
                         type="beaconing",
                         description=(f"Host {flow['src']} contacts {dst}:{dport} every "
-                                     f"~{mean:.0f}s with very regular timing ({len(flow_ts)} "
+                                     f"~{mean:.0f}s with very regular timing ({callbacks} "
                                      "connections) — machine-like beaconing pattern"),
                         severity_hint="high",
                         data={"src": flow["src"], "dst": dst, "port": dport,
                               "interval_seconds": round(mean, 1), "jitter": round(stdev / mean, 3),
-                              "connections": len(flow_ts)},
+                              "connections": callbacks},
                         timestamps=[_iso(flow_ts[0]), _iso(flow_ts[-1])],
                         mitre_hints=["T1071", "T1573"],
                     ))
@@ -176,10 +230,59 @@ def preprocess(packets: list[Packet], source_file: str) -> Summary:
             if flow["sni"] and flow["sni"] not in summary.iocs.domains:
                 summary.iocs.domains.append(flow["sni"])
 
+        # JA3 fingerprint of known-malicious tooling
+        if flow["ja3"]:
+            label = KNOWN_BAD_JA3.get(flow["ja3"])
+            if label:
+                summary.observations.append(new_obs(
+                    type="malicious_ja3",
+                    description=(f"TLS client fingerprint (JA3 {flow['ja3']}) matches "
+                                 f"known tooling: {label} — to {flow['sni'] or dst}:{dport}"),
+                    severity_hint="high",
+                    data={"ja3": flow["ja3"], "tool": label, "dst": dst, "sni": flow["sni"]},
+                    mitre_hints=["T1573"],
+                ))
+
+        # HTTP request inspection — dedup identical requests first (a beaconing
+        # channel repeats the same GET on every callback; report it once).
+        seen_reqs: set[tuple] = set()
+        unique_reqs = []
+        for req in flow["http_requests"]:
+            sig = (req.get("method"), req.get("host"), req.get("uri"), req.get("user_agent"))
+            if sig not in seen_reqs:
+                seen_reqs.add(sig)
+                unique_reqs.append(req)
+        for req in unique_reqs[:5]:
+            host, uri, ua = req.get("host", ""), req.get("uri", ""), req.get("user_agent", "")
+            if host:
+                full = f"http://{host}{uri}"
+                if full not in summary.iocs.urls:
+                    summary.iocs.urls.append(full)
+                if host not in summary.iocs.domains:
+                    summary.iocs.domains.append(host)
+            # Suspicious user agents (empty, or known offensive tools)
+            ua_low = ua.lower()
+            if not ua and host:
+                summary.observations.append(new_obs(
+                    type="suspicious_http",
+                    description=f"HTTP {req.get('method')} to {host}{uri} with NO User-Agent "
+                                "— uncommon for browsers, typical of scripts/malware",
+                    severity_hint="low",
+                    data=req, mitre_hints=["T1071.001"],
+                ))
+            elif any(t in ua_low for t in ("sqlmap", "nikto", "curl", "python-requests",
+                                           "powershell", "wget", "metasploit", "nmap")):
+                summary.observations.append(new_obs(
+                    type="tooling_user_agent",
+                    description=f"HTTP request to {host}{uri} uses tool/script User-Agent '{ua}'",
+                    severity_hint="medium",
+                    data=req, mitre_hints=["T1071.001"],
+                ))
+
     # ---- Cross-flow analysis ----------------------------------------------
     # Port scan: one source touching many ports on one destination
     scan_map: dict[tuple, set] = defaultdict(set)
-    for flow in flows.values():
+    for flow in channels.values():
         if flow["proto"] == "TCP":
             scan_map[(flow["src"], flow["dst"])].add(flow["dport"])
     for (src, dst), ports in scan_map.items():
@@ -203,6 +306,34 @@ def preprocess(packets: list[Packet], source_file: str) -> Summary:
                 severity_hint="medium",
                 data={"query": name, "label_entropy": round(shannon_entropy(label.encode()), 2)},
                 mitre_hints=["T1568.002", "T1071.004"],
+            ))
+
+    # DNS tunneling: many distinct subdomains under one parent domain with long,
+    # high-entropy labels = data smuggled inside DNS queries. Scored on volume.
+    by_parent: dict[str, list[str]] = defaultdict(list)
+    for name in all_dns:
+        parts = name.split(".")
+        if len(parts) >= 2:
+            by_parent[".".join(parts[-2:])].append(parts[0])
+    for parent, labels in by_parent.items():
+        unique = set(labels)
+        if len(unique) < 20:
+            continue
+        avg_len = sum(len(l) for l in unique) / len(unique)
+        avg_entropy = sum(shannon_entropy(l.encode()) for l in unique) / len(unique)
+        # tunneling score 0-100 from subdomain count + label length + entropy
+        score = min(100, len(unique) // 2 + (avg_len > 20) * 25 + (avg_entropy > 3.5) * 25)
+        if score >= 50:
+            summary.observations.append(new_obs(
+                type="dns_tunneling",
+                description=(f"{len(unique)} unique subdomains queried under '{parent}' "
+                             f"(avg label {avg_len:.0f} chars, entropy {avg_entropy:.1f}) — "
+                             f"strong DNS tunneling / exfiltration indicator (score {score}/100)"),
+                severity_hint="high" if score >= 70 else "medium",
+                data={"parent_domain": parent, "unique_subdomains": len(unique),
+                      "avg_label_length": round(avg_len, 1),
+                      "avg_label_entropy": round(avg_entropy, 2), "tunneling_score": score},
+                mitre_hints=["T1071.004", "T1048"],
             ))
 
     # Baseline deviation: any external destination receiving an outsized share of bytes
