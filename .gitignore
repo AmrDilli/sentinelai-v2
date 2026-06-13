@@ -2,7 +2,10 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv/
+venv/
 node_modules/
 dist/
 samples/generated/
+*.db
 .DS_Store
