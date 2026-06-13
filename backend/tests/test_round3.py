@@ -74,6 +74,28 @@ def test_auth_rejects_dupes_and_bad_login(tmp_path, monkeypatch):
     assert out["token"] and out["user"]["username"] == "analyst"
 
 
+# ---- threat-intel feed ------------------------------------------------------
+def test_threatintel_lookups():
+    from app.core import threatintel
+    s = threatintel.stats()
+    assert s["ja3"] >= 3 and s["ips"] >= 1 and s["domains"] >= 1
+    # Parent-domain matching: a random subdomain resolves to the flagged parent.
+    assert threatintel.domain_label("x.y.tunnel-exfil.net")
+    assert threatintel.domain_label("totally-clean-domain.example") is None
+    # JA3 lookup hits a known fingerprint.
+    assert threatintel.ja3_label("a0e9f5d64349fb13191bc781f81f42e1")
+    assert threatintel.ja3_label("deadbeef") is None
+
+
+def test_network_uses_threatintel():
+    summary = net_pre.preprocess(
+        net_parser.parse_pcap(str(SAMPLES / "beaconing.pcap")), "beaconing.pcap")
+    types = [o.type for o in summary.observations]
+    assert "known_bad_ip" in types
+    # Bad-domain DNS hits collapse to a single grouped observation.
+    assert types.count("known_bad_domain") <= 1
+
+
 def test_session_token_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "sess.db"))
     auth.init_auth()

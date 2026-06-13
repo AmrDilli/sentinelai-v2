@@ -85,6 +85,20 @@ admin account created at the same time → one incident path).
 - **Dashboard** — animated risk gauge, interactive **MITRE ATT&CK kill-chain heatmap**,
   **connection-geography map** of external IPs, per-module telemetry charts, collapsible
   **IOC tables** (click to copy), toast notifications, and **JSON / PDF report export**.
+- **Threat-intelligence feed** — JA3 fingerprints and known-bad IPs/domains drive the
+  network module's highest-confidence detections. Ships with a **bundled offline snapshot**
+  (`app/data/threat_intel.json`) so it works with zero keys, and can **refresh live from
+  abuse.ch** on demand (`POST /api/threatintel/refresh`, cached to disk).
+- **Live progress over WebSocket** — the dashboard subscribes to `/api/ws/analyses` and
+  receives pushed updates as each stage completes, **falling back to polling** if the
+  socket drops, so progress bars move in real time without hammering the API.
+- **Explainable findings** — every finding has an **“✦ Explain”** drill-down that expands
+  it into an analyst-grade writeup (what it means, why it matters, how to confirm,
+  recommended response). Uses the live model when configured; deterministic under `mock`.
+- **Branded PDF reports** — `GET /api/analyses/{id}/report.pdf` renders a polished,
+  multi-section incident report via **ReportLab** (colour-coded score band, findings,
+  ATT&CK summary, playbook, SOAR log, page numbers). Degrades to a printable HTML view
+  if ReportLab isn't installed.
 
 ## AI providers (one env var to switch)
 
@@ -155,9 +169,13 @@ Every push runs the same suite plus a frontend build in CI (`.github/workflows/c
 | `POST` | `/api/analyze` | Upload a file (multipart `file`, optional `module`); runs in background |
 | `GET`  | `/api/analyses` | List analyses with status/score/severity (full report embedded for completed cases, so the aggregate views render in one request) |
 | `GET`  | `/api/analyses/{id}` | Full report for one analysis |
+| `GET`  | `/api/analyses/{id}/report.pdf` | Download the branded PDF incident report |
+| `POST` | `/api/analyses/{id}/explain` | Body `{finding_index}` → analyst-grade drill-down for one finding |
+| `WS`   | `/api/ws/analyses?token=…` | Live progress stream (pushed `{analyses}` on any change) |
 | `POST` | `/api/correlate` | Body: JSON array of ids → unified cross-module view |
 | `POST` | `/api/soar/{id}/approve?action_index=N` | Approve a pending (medium-tier) action |
-| `GET`  | `/api/health` | Provider + enrichment key status |
+| `POST` | `/api/threatintel/refresh` | Pull fresh JA3/IP indicators from abuse.ch |
+| `GET`  | `/api/health` | Provider, PDF, threat-intel + enrichment status |
 
 ---
 
