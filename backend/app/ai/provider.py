@@ -7,6 +7,9 @@ One interface, three implementations:
                      so the entire pipeline runs with no API key (demos, tests, CI)
 
 Switching providers is one env var: AI_PROVIDER=deepseek|claude|mock
+
+Each provider records token usage + an estimated USD cost for the last call on
+`self.last_usage`, so the pipeline can report cost per analysis.
 """
 from __future__ import annotations
 
@@ -17,9 +20,19 @@ import requests
 
 from app.config import settings
 
+# Approximate USD per 1K tokens (input, output). Update as pricing changes.
+PRICING = {
+    "deepseek": (0.00027, 0.0011),
+    "claude": (0.003, 0.015),
+    "mock": (0.0, 0.0),
+}
+
 
 class AIProvider:
     name = "base"
+
+    def __init__(self):
+        self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0}
 
     def complete(self, system: str, user: str) -> str:
         raise NotImplementedError
@@ -28,6 +41,14 @@ class AIProvider:
         """Call the model and parse a JSON object out of the reply."""
         text = self.complete(system, user)
         return extract_json(text)
+
+    def _record(self, prompt_tokens: int, completion_tokens: int):
+        pin, pout = PRICING.get(self.name, (0.0, 0.0))
+        self.last_usage = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "cost_usd": round(prompt_tokens / 1000 * pin + completion_tokens / 1000 * pout, 6),
+        }
 
 
 def extract_json(text: str) -> dict:
@@ -46,6 +67,11 @@ def extract_json(text: str) -> dict:
         raise
 
 
+def _estimate_tokens(*texts: str) -> int:
+    """Rough fallback when the API doesn't return usage (~4 chars/token)."""
+    return sum(len(t) for t in texts) // 4
+
+
 class DeepSeekProvider(AIProvider):
     name = "deepseek"
 
@@ -59,11 +85,17 @@ class DeepSeekProvider(AIProvider):
                              {"role": "user", "content": user}],
                 "temperature": 0.2,
                 "max_tokens": 4096,
+                "response_format": {"type": "json_object"},
             },
             timeout=120,
         )
         r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"]
+        body = r.json()
+        usage = body.get("usage", {})
+        text = body["choices"][0]["message"]["content"]
+        self._record(usage.get("prompt_tokens") or _estimate_tokens(system, user),
+                     usage.get("completion_tokens") or _estimate_tokens(text))
+        return text
 
 
 class ClaudeProvider(AIProvider):
@@ -85,7 +117,12 @@ class ClaudeProvider(AIProvider):
             timeout=120,
         )
         r.raise_for_status()
-        return r.json()["content"][0]["text"]
+        body = r.json()
+        usage = body.get("usage", {})
+        text = body["content"][0]["text"]
+        self._record(usage.get("input_tokens") or _estimate_tokens(system, user),
+                     usage.get("output_tokens") or _estimate_tokens(text))
+        return text
 
 
 class MockProvider(AIProvider):
@@ -128,6 +165,7 @@ class MockProvider(AIProvider):
             f"'{summary.get('source_file', '?')}': {len(observations)} observations, "
             f"{len(findings)} promoted to findings."
         )
+        self._record(0, 0)
         return json.dumps({"findings": findings, "narrative": narrative,
                            "overall_assessment": "See findings."})
 
