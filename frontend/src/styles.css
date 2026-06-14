@@ -477,6 +477,7 @@ select { font-family: var(--font-body); }
 .geomap { border: 1px solid var(--border); border-radius: 10px; background: radial-gradient(ellipse at center, color-mix(in srgb, var(--brand) 8%, var(--panel-2)), var(--panel)); width: 100%; }
 .grat { stroke: color-mix(in srgb, var(--brand) 8%, transparent); stroke-width: 0.5; }
 .geo-land { fill: color-mix(in srgb, var(--brand) 12%, transparent); stroke: color-mix(in srgb, var(--brand) 40%, transparent); stroke-width: 0.6; stroke-linejoin: round; }
+.geo-border { stroke: color-mix(in srgb, var(--brand) 28%, transparent); stroke-width: 0.45; stroke-linejoin: round; stroke-linecap: round; }
 .geo-link { stroke: color-mix(in srgb, var(--accent) 45%, transparent); stroke-width: 1; }
 .geo-link.bad { stroke: color-mix(in srgb, var(--critical) 70%, transparent); stroke-width: 1.3; stroke-dasharray: 5 3; animation: dash 0.9s linear infinite; }
 @keyframes dash { to { stroke-dashoffset: -16; } }

@@ -1,5 +1,6 @@
 import React from "react";
 import { LAND } from "./world-land.js";
+import { BORDERS } from "./world-borders.js";
 
 // Equirectangular projection: lon/lat -> x/y inside the viewBox.
 const W = 720, H = 360;
@@ -8,6 +9,11 @@ const project = (lon, lat) => [((lon + 180) / 360) * W, ((90 - lat) / 180) * H];
 // Pre-build the SVG path for all landmasses once at module load.
 const LAND_PATH = LAND.map(
   (ring) => "M" + ring.map(([lon, lat]) => project(lon, lat).map((n) => n.toFixed(1)).join(",")).join("L") + "Z"
+).join(" ");
+
+// Country border lines (open polylines — no closing "Z"), drawn thin over land.
+const BORDER_PATH = BORDERS.map(
+  (line) => "M" + line.map(([lon, lat]) => project(lon, lat).map((n) => n.toFixed(1)).join(",")).join("L")
 ).join(" ");
 
 export default function GeoMap({ geo, reputation }) {
@@ -46,6 +52,8 @@ export default function GeoMap({ geo, reputation }) {
 
         {/* real world landmasses */}
         <path d={LAND_PATH} className="geo-land" />
+        {/* country borders (thin, drawn over land) */}
+        <path d={BORDER_PATH} className="geo-border" fill="none" />
 
         {/* connection lines (curved arcs from home to each endpoint) */}
         {entries.map(([ip, g]) => {
