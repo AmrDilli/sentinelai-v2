@@ -4,7 +4,7 @@ import CorrelatedView from "../components/CorrelatedView.jsx";
 import UploadPanel from "../components/UploadPanel.jsx";
 import { deleteAnalysis } from "../api/client.js";
 
-const SEV_COLOR = { info: "#64748b", low: "#38bdf8", medium: "#f59e0b", high: "#f97316", critical: "#ef4444" };
+const SEV_COLOR = { info: "#2dd4bf", low: "#facc15", medium: "#fb923c", high: "#ef5b15", critical: "#ef4444" };
 
 export default function InvestigationsPage({
   analyses, selectedId, report, correlated, checked,

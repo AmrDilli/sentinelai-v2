@@ -9,12 +9,12 @@
   --brand-grad: linear-gradient(120deg, #22d3ee 0%, #3b82f6 58%, #818cf8 100%);
   --accent: #22d3ee;
 
-  /* severity (shared by both themes) */
-  --info: #64748b;
-  --low: #38bdf8;
-  --medium: #fbbf24;
-  --high: #fb923c;
-  --critical: #fb5571;
+  /* severity — heat scale (teal-green -> yellow -> orange -> red) */
+  --info: #2dd4bf;
+  --low: #facc15;
+  --medium: #fb923c;
+  --high: #ef5b15;
+  --critical: #ef4444;
   --green: #34d399;
 
   --font-display: "Space Grotesk", "Rajdhani", "Segoe UI", sans-serif;
@@ -243,6 +243,7 @@ select { font-family: var(--font-body); }
 .badge {
   font-size: 10px; padding: 3px 9px; border-radius: 6px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 1px; border: 1px solid currentColor; white-space: nowrap;
+  box-shadow: 0 0 11px -3px currentColor; text-shadow: 0 0 9px color-mix(in srgb, currentColor 55%, transparent);
 }
 .badge.info { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
 .badge.low { color: var(--low); background: color-mix(in srgb, var(--low) 13%, transparent); }

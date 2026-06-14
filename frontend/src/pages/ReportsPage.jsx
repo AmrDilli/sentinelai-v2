@@ -2,7 +2,7 @@ import React from "react";
 import { exportJSON, exportServerPDF } from "../api/export.js";
 import { IconReport } from "../components/icons.jsx";
 
-const SEV_COLOR = { info: "#64748b", low: "#38bdf8", medium: "#f59e0b", high: "#f97316", critical: "#ef4444" };
+const SEV_COLOR = { info: "#2dd4bf", low: "#facc15", medium: "#fb923c", high: "#ef5b15", critical: "#ef4444" };
 
 export default function ReportsPage({ analyses, onOpen }) {
   const done = analyses.filter((a) => a.status === "completed" && a.report);

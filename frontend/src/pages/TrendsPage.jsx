@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
 
-const SEV = [["critical", "#ef4444"], ["high", "#f97316"], ["medium", "#f59e0b"], ["low", "#38bdf8"]];
+const SEV = [["critical", "#ef4444"], ["high", "#ef5b15"], ["medium", "#fb923c"], ["low", "#facc15"]];
 
 // Bucket completed cases by day, counting findings per severity.
 function buildSeries(analyses) {
