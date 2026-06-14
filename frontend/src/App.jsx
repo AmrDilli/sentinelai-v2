@@ -31,6 +31,7 @@ import InvestigationsPage from "./pages/InvestigationsPage.jsx";
 import TrendsPage from "./pages/TrendsPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
+import LiveCapturePage from "./pages/LiveCapturePage.jsx";
 
 export default function App() {
   const toast = useToast();
@@ -38,6 +39,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [view, setView] = useState("dashboard");
+  const [mode, setMode] = useState("file"); // "file" | "live"
   const [analyses, setAnalyses] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [report, setReport] = useState(null);
@@ -149,11 +151,14 @@ export default function App() {
       <CommandPalette analyses={analyses} views={VIEWS} onOpen={openCase}
         setView={(v) => { setView(v); setCorrelated(null); }} />
       <Sidebar view={view} setView={(v) => { setView(v); setCorrelated(null); }}
-        alertCount={alertCount} theme={theme} toggleTheme={toggle} />
+        alertCount={alertCount} theme={theme} toggleTheme={toggle}
+        mode={mode} setMode={setMode} />
       <div className="main">
         <Topbar analyses={visible} backendUp={!!health} timeFilter={timeFilter}
           setTimeFilter={setTimeFilter} user={user} onLogout={handleLogout} />
         <div className="content">
+          {mode === "live" && <LiveCapturePage />}
+          {mode === "file" && <>
           {view === "dashboard" && <DashboardPage analyses={visible} onOpen={openCase} />}
           {view === "alerts" && <AlertsPage analyses={visible} onOpen={openCase}
             onGoToInvestigations={() => { setView("investigations"); setCorrelated(null); }} />}
@@ -169,6 +174,7 @@ export default function App() {
           {view === "trends" && <TrendsPage analyses={visible} />}
           {view === "reports" && <ReportsPage analyses={visible} onOpen={openCase} />}
           {view === "settings" && <SettingsPage health={health} toast={toast} />}
+          </>}
         </div>
       </div>
     </div>

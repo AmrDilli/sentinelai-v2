@@ -12,7 +12,8 @@ const NAV = [
   { id: "reports", label: "Reports", Icon: IconReport },
 ];
 
-export default function Sidebar({ view, setView, alertCount, theme, toggleTheme }) {
+export default function Sidebar({ view, setView, alertCount, theme, toggleTheme, mode, setMode }) {
+  const live = mode === "live";
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -20,9 +21,21 @@ export default function Sidebar({ view, setView, alertCount, theme, toggleTheme 
         <div className="brand-name">Sentinel<span>AI</span></div>
       </div>
 
+      {/* Mode switch: File Analysis <-> Live Capture */}
+      <div className="mode-switch">
+        <button className={`mode-btn ${!live ? "on" : ""}`} onClick={() => setMode("file")}>
+          <IconReport size={15} /> File
+        </button>
+        <button className={`mode-btn ${live ? "on" : ""}`} onClick={() => setMode("live")}>
+          <span className="live-dot" /> Live
+        </button>
+      </div>
+
       <nav className="nav">
         {NAV.map(({ id, label, Icon }) => (
-          <div key={id} className={`nav-item ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
+          <div key={id}
+            className={`nav-item ${!live && view === id ? "active" : ""} ${live ? "muted-nav" : ""}`}
+            onClick={() => { setMode("file"); setView(id); }}>
             <Icon />
             <span>{label}</span>
             {id === "alerts" && alertCount > 0 && <span className="nav-count">{alertCount}</span>}
@@ -33,7 +46,8 @@ export default function Sidebar({ view, setView, alertCount, theme, toggleTheme 
       <div className="nav-spacer" />
 
       <nav className="nav">
-        <div className={`nav-item ${view === "settings" ? "active" : ""}`} onClick={() => setView("settings")}>
+        <div className={`nav-item ${!live && view === "settings" ? "active" : ""}`}
+          onClick={() => { setMode("file"); setView("settings"); }}>
           <IconSettings /><span>Settings</span>
         </div>
       </nav>
