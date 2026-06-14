@@ -10,7 +10,7 @@ export default function Particles({ count = 75 }) {
     if (!canvas) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const ctx = canvas.getContext("2d");
-    const COLORS = ["217,70,239", "168,85,247", "192,132,252"];
+    const COLORS = ["34,211,238", "59,130,246", "56,189,248", "168,85,247"];
     let w, h, dots = [], raf;
 
     const resize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };
