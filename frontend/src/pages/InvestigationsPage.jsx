@@ -21,7 +21,7 @@ export default function InvestigationsPage({
   return (
     <div className="view-enter">
       <div className="page-head"><h1>Investigations</h1>
-        <span className="sub">{analyses.length} case{analyses.length === 1 ? "" : "s"}</span></div>
+        <span className="sub">Case workspace — upload artifacts, open a case for its full report, or select 2+ to correlate · {analyses.length} case{analyses.length === 1 ? "" : "s"}</span></div>
 
       <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 16, alignItems: "start" }}>
         <div>

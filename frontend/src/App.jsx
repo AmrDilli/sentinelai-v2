@@ -149,7 +149,8 @@ export default function App() {
           setTimeFilter={setTimeFilter} user={user} onLogout={handleLogout} />
         <div className="content">
           {view === "dashboard" && <DashboardPage analyses={visible} onOpen={openCase} />}
-          {view === "alerts" && <AlertsPage analyses={visible} onUploaded={refresh} onOpen={openCase} toast={toast} />}
+          {view === "alerts" && <AlertsPage analyses={visible} onOpen={openCase}
+            onGoToInvestigations={() => { setView("investigations"); setCorrelated(null); }} />}
           {view === "investigations" && (
             <InvestigationsPage
               analyses={visible} selectedId={selectedId} report={report}

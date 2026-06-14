@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import UploadPanel from "../components/UploadPanel.jsx";
 import { IconNetwork, IconChip, IconCloud, IconDots } from "../components/icons.jsx";
 
 const MODULE_ICON = { network: IconNetwork, forensics: IconCloud, malware: IconChip };
 const RANK = { info: 0, low: 1, medium: 2, high: 3, critical: 4 };
+const SEV_ORDER = ["critical", "high", "medium", "low"];
 
 // Flatten every finding across completed cases into a single alert feed.
 function buildAlerts(analyses) {
@@ -22,28 +22,39 @@ function buildAlerts(analyses) {
   return alerts.sort((x, y) => RANK[y.severity] - RANK[x.severity]);
 }
 
-export default function AlertsPage({ analyses, onUploaded, onOpen, toast }) {
+export default function AlertsPage({ analyses, onOpen, onGoToInvestigations }) {
   const [focus, setFocus] = useState(false);
   const [sev, setSev] = useState("all");
   const [mod, setMod] = useState("all");
   const [menu, setMenu] = useState(null);
 
-  let alerts = buildAlerts(analyses);
+  const allAlerts = buildAlerts(analyses);
+  let alerts = allAlerts;
   if (focus) alerts = alerts.filter((a) => ["critical", "high"].includes(a.severity));
   if (sev !== "all") alerts = alerts.filter((a) => a.severity === sev);
   if (mod !== "all") alerts = alerts.filter((a) => a.module === mod);
 
+  const counts = Object.fromEntries(
+    SEV_ORDER.map((s) => [s, allAlerts.filter((a) => a.severity === s).length]));
   const running = analyses.filter((a) => a.status === "running");
+  const completed = analyses.filter((a) => a.status === "completed").length;
 
   return (
     <div className="view-enter">
       <div className="page-head">
-        <h1>Active Alerts</h1>
-        <span className="sub">{alerts.length} finding{alerts.length === 1 ? "" : "s"} across {analyses.filter(a => a.status === "completed").length} cases</span>
+        <h1>Alert Queue</h1>
+        <span className="sub">Live triage feed — every finding across {completed} analyzed case{completed === 1 ? "" : "s"}</span>
       </div>
 
-      <div style={{ marginBottom: 18 }}>
-        <UploadPanel onUploaded={onUploaded} toast={toast} />
+      {/* Severity summary — click a tile to filter the queue */}
+      <div className="queue-stats">
+        {SEV_ORDER.map((s) => (
+          <button key={s} className={`qstat ${s} ${sev === s ? "active" : ""}`}
+            onClick={() => setSev(sev === s ? "all" : s)}>
+            <span className="qstat-num">{counts[s]}</span>
+            <span className="qstat-lbl">{s}</span>
+          </button>
+        ))}
       </div>
 
       {running.length > 0 && (
@@ -80,7 +91,15 @@ export default function AlertsPage({ analyses, onUploaded, onOpen, toast }) {
       </div>
 
       {alerts.length === 0 ? (
-        <div className="card empty"><span className="big">✓</span>No alerts match. Upload a file to generate findings.</div>
+        <div className="card empty">
+          <span className="big">✓</span>
+          {allAlerts.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+              <span>No active alerts. Ingest an artifact to generate findings.</span>
+              <button className="btn primary" onClick={onGoToInvestigations}>Go to Investigations to upload</button>
+            </div>
+          ) : "No alerts match the current filters."}
+        </div>
       ) : (
         <div className="alert-grid stagger">
           {alerts.map((a, i) => {
