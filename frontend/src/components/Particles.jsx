@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from "react";
 
 // Subtle drifting particle field behind the app (cyan/blue, low opacity).
 // Sits below content (z-index -1) and is purely decorative.
-export default function Particles({ count = 46 }) {
+export default function Particles({ count = 75 }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -10,7 +10,7 @@ export default function Particles({ count = 46 }) {
     if (!canvas) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const ctx = canvas.getContext("2d");
-    const COLORS = ["56,189,248", "34,211,238", "59,130,246"];
+    const COLORS = ["217,70,239", "168,85,247", "192,132,252"];
     let w, h, dots = [], raf;
 
     const resize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };
