@@ -5,7 +5,7 @@ import SeverityChart from "../components/SeverityChart.jsx";
 import ActivityHeatmap from "../components/ActivityHeatmap.jsx";
 import { IconAlert, IconShield, IconClock, IconTrend } from "../components/icons.jsx";
 
-const SEV_COLOR = { info: "#2dd4bf", low: "#facc15", medium: "#fb923c", high: "#ef5b15", critical: "#ef4444" };
+const SEV_COLOR = { info: "#2dd4bf", low: "#facc15", medium: "#fb923c", high: "#ef5b15", critical: "#dc2626" };
 
 export default function DashboardPage({ analyses, onOpen }) {
   const done = analyses.filter((a) => a.status === "completed");

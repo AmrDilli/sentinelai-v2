@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, Legend, ResponsiveContainer, Tooltip } from "recha
 
 const COLORS = {
   info: "#2dd4bf", low: "#facc15", medium: "#fb923c",
-  high: "#ef5b15", critical: "#ef4444",
+  high: "#ef5b15", critical: "#dc2626",
 };
 
 export default function SeverityChart({ distribution, height = 230 }) {

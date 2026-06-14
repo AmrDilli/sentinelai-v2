@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 
 const COLORS = {
   info: "#2dd4bf", low: "#facc15", medium: "#fb923c",
-  high: "#ef5b15", critical: "#ef4444",
+  high: "#ef5b15", critical: "#dc2626",
 };
 
 export default function ScoreGauge({ score, severity }) {
