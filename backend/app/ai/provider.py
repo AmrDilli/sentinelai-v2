@@ -87,7 +87,7 @@ class DeepSeekProvider(AIProvider):
                 "max_tokens": 4096,
                 "response_format": {"type": "json_object"},
             },
-            timeout=120,
+            timeout=(10, 120),  # (connect, read): fail fast if the host is blocked
         )
         if not r.ok:
             # Surface DeepSeek's actual error body (e.g. "Model Not Exist",
@@ -119,7 +119,7 @@ class ClaudeProvider(AIProvider):
                 "messages": [{"role": "user", "content": user}],
                 "max_tokens": 4096,
             },
-            timeout=120,
+            timeout=(10, 120),  # (connect, read): fail fast if the host is blocked
         )
         if not r.ok:
             raise RuntimeError(f"Anthropic API {r.status_code} (model "
