@@ -45,6 +45,36 @@ def test_beaconing_reports_merged_connection_count():
     assert all(o.data.get("connections", 0) >= 1 for o in beacons)
 
 
+# ---- provider-failure resilience -------------------------------------------
+def test_failed_provider_degrades_instead_of_zero():
+    """A failing AI provider (bad key / no credits / outage) must NOT yield a
+    misleading 0% 'no threats' result. It falls back to the deterministic engine
+    so a malicious artifact still scores, flagged as degraded."""
+    from app.ai import analyzer
+    from app.ai.provider import MockProvider
+    from app.core.scoring import score_findings
+    from app.modules.malware import parser as mp, preprocessor as pp
+
+    class FailingProvider(MockProvider):
+        name = "deepseek"
+        def complete(self, system, user):
+            raise RuntimeError("401 Unauthorized / Insufficient Balance")
+
+    orig = analyzer.get_provider
+    analyzer.get_provider = lambda: FailingProvider()
+    try:
+        summary = pp.preprocess(mp.analyze_file(str(SAMPLES / "fake_malware.bin")), "m.bin")
+        res = analyzer.analyze(summary)
+    finally:
+        analyzer.get_provider = orig
+
+    assert res["ai_degraded"] is True
+    assert len(res["findings"]) > 1                  # real findings, not one info stub
+    score, sev, _ = score_findings(res["findings"])
+    assert score > 0 and sev != "info"               # malware is NOT scored 0%
+    assert "DEGRADED" in res["narrative"]             # clearly flagged to the analyst
+
+
 # ---- scoring edges ----------------------------------------------------------
 def test_scoring_empty_findings():
     score, level, dist = score_findings([])

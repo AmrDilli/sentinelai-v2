@@ -121,6 +121,7 @@ def analyze(summary: Summary) -> dict:
         for k in usage_total:
             usage_total[k] += provider.last_usage.get(k, 0)
 
+    degraded = False
     try:
         result = provider.complete_json(SYSTEM_PROMPT, user_prompt)
         add_usage()
@@ -139,19 +140,31 @@ def analyze(summary: Summary) -> dict:
             except Exception:
                 pass  # keep the draft if verification fails
     except Exception as exc:
-        return {
-            "findings": [{
-                "title": "AI Analysis Unavailable",
-                "description": f"AI provider '{provider.name}' failed ({exc}). "
-                               "Pre-processor observations are still shown below.",
-                "severity": "info", "confidence": 1.0, "evidence": [],
-                "mitre_techniques": [], "mitre_tactics": [], "remediation": [],
-            }],
-            "narrative": "AI analysis could not run; review raw observations manually.",
-            "overall_assessment": "Incomplete analysis.",
-            "ai_provider": provider.name,
-            "usage": usage_total, "cached": False,
-        }
+        # The configured provider failed (bad/expired key, no credits, rate
+        # limit, outage). Do NOT return an empty 0% result — for a security tool
+        # that would make a malicious artifact look clean. Degrade to the
+        # deterministic engine (promote pre-processor observations to findings)
+        # so the score stays meaningful, and flag the run as degraded.
+        from app.ai.provider import MockProvider
+        degraded = True
+        degraded_reason = str(exc)
+        try:
+            result = MockProvider().complete_json(SYSTEM_PROMPT, user_prompt)
+        except Exception:
+            return {
+                "findings": [{
+                    "title": "Analysis Engine Unavailable",
+                    "description": f"AI provider '{provider.name}' failed "
+                                   f"({degraded_reason}) and the deterministic "
+                                   "fallback also failed. Review raw observations manually.",
+                    "severity": "info", "confidence": 1.0, "evidence": [],
+                    "mitre_techniques": [], "mitre_tactics": [], "remediation": [],
+                }],
+                "narrative": "Analysis could not run; review raw observations manually.",
+                "overall_assessment": "Incomplete analysis.",
+                "ai_provider": provider.name, "usage": usage_total,
+                "cached": False, "ai_degraded": True,
+            }
 
     findings = []
     for f in result.get("findings", []):
@@ -166,14 +179,24 @@ def analyze(summary: Summary) -> dict:
             "remediation": [str(r) for r in f.get("remediation", [])][:10],
         })
 
+    narrative = str(result.get("narrative", ""))
+    if degraded:
+        narrative = (f"[DEGRADED MODE — the '{provider.name}' AI provider was "
+                     f"unavailable ({degraded_reason}); showing deterministic "
+                     "rule-based analysis. Findings and score are valid but lack "
+                     "AI reasoning. Fix the provider/API key for full analysis.] "
+                     + narrative)
+
     out = {
         "findings": findings,
-        "narrative": str(result.get("narrative", "")),
+        "narrative": narrative,
         "overall_assessment": str(result.get("overall_assessment", "")),
-        "ai_provider": provider.name,
+        "ai_provider": provider.name + (" (degraded)" if degraded else ""),
         "usage": usage_total,
         "cached": False,
+        "ai_degraded": degraded,
     }
-    if settings.AI_CACHE:
+    # Don't cache a degraded result — re-run for real once the provider recovers.
+    if settings.AI_CACHE and not degraded:
         _CACHE[key] = out
     return out
