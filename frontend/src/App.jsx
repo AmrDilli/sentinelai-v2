@@ -161,7 +161,8 @@ export default function App() {
         <div className="content">
           {mode === "live" && <LiveCapturePage />}
           {mode === "file" && <>
-          {view === "dashboard" && <DashboardPage analyses={visible} onOpen={openCase} />}
+          {view === "dashboard" && <DashboardPage analyses={visible} onOpen={openCase}
+            onNavigate={(v) => { setView(v); setCorrelated(null); }} />}
           {view === "alerts" && <AlertsPage analyses={visible} onOpen={openCase}
             onGoToInvestigations={() => { setView("investigations"); setCorrelated(null); }} />}
           {view === "investigations" && (

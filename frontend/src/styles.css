@@ -274,6 +274,13 @@ select { font-family: var(--font-body); }
 .kpi-delta.up { color: var(--critical); }
 .kpi-delta.down { color: var(--green); }
 .kpi-delta.flat { color: var(--text-mute); }
+.kpi.clickable { cursor: pointer; }
+.kpi.clickable:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.kpi-go { position: absolute; bottom: 12px; right: 15px; font-size: 20px; line-height: 1; color: var(--text-mute); opacity: 0; transform: translateX(-3px); transition: 0.2s; }
+.kpi.clickable:hover .kpi-go { opacity: 1; transform: translateX(0); color: var(--brand); }
+.card.clickable { cursor: pointer; }
+.card-link { font-size: 12px; font-weight: 500; color: var(--brand); cursor: pointer; margin-left: auto; opacity: 0.85; }
+.card-link:hover { opacity: 1; text-shadow: 0 0 10px color-mix(in srgb, var(--brand) 50%, transparent); }
 
 /* =========================== grids =========================== */
 .grid-3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
