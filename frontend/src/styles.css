@@ -755,3 +755,7 @@ select { font-family: var(--font-body); }
 
 /* Light theme: soften the aurora so it stays readable */
 [data-theme="light"] body::before { opacity: 0.5; }
+
+/* Drifting particle field (canvas), behind content */
+.particles { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+[data-theme="light"] .particles { opacity: 0.5; }

@@ -3,6 +3,7 @@ import { listAnalyses, getAnalysis, correlate, me, logout as apiLogout, getToken
 import { useToast } from "./components/Toast.jsx";
 import { useTheme } from "./useTheme.js";
 import AuthScreen from "./components/AuthScreen.jsx";
+import Particles from "./components/Particles.jsx";
 import CommandPalette from "./components/CommandPalette.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import Topbar from "./components/Topbar.jsx";
@@ -148,6 +149,7 @@ export default function App() {
 
   return (
     <div className="shell">
+      <Particles />
       <CommandPalette analyses={analyses} views={VIEWS} onOpen={openCase}
         setView={(v) => { setView(v); setCorrelated(null); }} />
       <Sidebar view={view} setView={(v) => { setView(v); setCorrelated(null); }}
