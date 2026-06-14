@@ -43,7 +43,22 @@ def test_pdf_generation_unit():
     report = orchestrator.run_analysis(str(SAMPLES / "beaconing.pcap")).to_dict()
     pdf = report_pdf.build_report_pdf(report)
     assert pdf[:5] == b"%PDF-"
-    assert len(pdf) > 2000
+    assert len(pdf) > 8000  # full multi-section report, not a stub
+    # Verify the formal structure when a PDF text extractor is available.
+    try:
+        import io
+        import pypdf
+    except Exception:
+        return
+    reader = pypdf.PdfReader(io.BytesIO(pdf))
+    assert len(reader.pages) >= 6
+    cover = reader.pages[0].extract_text()
+    assert "TLP:AMBER" in cover                       # classification marking
+    assert "Security Incident Analysis Report" in cover
+    all_text = " ".join(p.extract_text() for p in reader.pages)
+    for section in ("Executive Summary", "Indicators of Compromise",
+                    "MITRE ATT&CK", "Recommendations"):
+        assert section in all_text, f"missing section: {section}"
 
 
 def test_pdf_endpoint(client):

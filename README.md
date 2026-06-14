@@ -95,10 +95,15 @@ admin account created at the same time → one incident path).
 - **Explainable findings** — every finding has an **“✦ Explain”** drill-down that expands
   it into an analyst-grade writeup (what it means, why it matters, how to confirm,
   recommended response). Uses the live model when configured; deterministic under `mock`.
-- **Branded PDF reports** — `GET /api/analyses/{id}/report.pdf` renders a polished,
-  multi-section incident report via **ReportLab** (colour-coded score band, findings,
-  ATT&CK summary, playbook, SOAR log, page numbers). Degrades to a printable HTML view
-  if ReportLab isn't installed.
+- **Formal IR report (PDF)** — `GET /api/analyses/{id}/report.pdf` renders a
+  consulting-grade **incident response report** via **ReportLab**, structured the way a
+  real SOC/IR team delivers it: **TLP:AMBER** classification marking on every page (FIRST
+  TLP v2.0), cover page, document control + distribution + analyst sign-off, executive
+  summary, incident overview, severity assessment, timeline, technical findings (F-001…),
+  **MITRE ATT&CK** mapping, an actionable **IOC table** (annotated with threat-intel and
+  reputation context), NIST SP 800-61r3 **containment/eradication/recovery**, tactical +
+  strategic recommendations, analyst conclusion, and a methodology appendix. Degrades to a
+  printable HTML view if ReportLab isn't installed.
 
 ## AI providers (one env var to switch)
 
@@ -169,7 +174,7 @@ Every push runs the same suite plus a frontend build in CI (`.github/workflows/c
 | `POST` | `/api/analyze` | Upload a file (multipart `file`, optional `module`); runs in background |
 | `GET`  | `/api/analyses` | List analyses with status/score/severity (full report embedded for completed cases, so the aggregate views render in one request) |
 | `GET`  | `/api/analyses/{id}` | Full report for one analysis |
-| `GET`  | `/api/analyses/{id}/report.pdf` | Download the branded PDF incident report |
+| `GET`  | `/api/analyses/{id}/report.pdf` | Download the formal TLP:AMBER incident-response PDF |
 | `POST` | `/api/analyses/{id}/explain` | Body `{finding_index}` → analyst-grade drill-down for one finding |
 | `WS`   | `/api/ws/analyses?token=…` | Live progress stream (pushed `{analyses}` on any change) |
 | `POST` | `/api/correlate` | Body: JSON array of ids → unified cross-module view |
