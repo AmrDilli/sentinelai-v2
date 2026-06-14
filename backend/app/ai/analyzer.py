@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 
 from app.config import settings
+
+logger = logging.getLogger("sentinelai.ai")
 from app.core.schema import Summary, validate_severity
 from app.ai.provider import get_provider
 
@@ -148,6 +151,10 @@ def analyze(summary: Summary) -> dict:
         from app.ai.provider import MockProvider
         degraded = True
         degraded_reason = str(exc)
+        # Make the failure visible in the backend terminal (it was previously
+        # only buried in the report text).
+        logger.warning("AI provider '%s' failed — falling back to deterministic "
+                       "analysis. Reason: %s", provider.name, degraded_reason)
         try:
             result = MockProvider().complete_json(SYSTEM_PROMPT, user_prompt)
         except Exception:

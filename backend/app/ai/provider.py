@@ -89,7 +89,12 @@ class DeepSeekProvider(AIProvider):
             },
             timeout=120,
         )
-        r.raise_for_status()
+        if not r.ok:
+            # Surface DeepSeek's actual error body (e.g. "Model Not Exist",
+            # "Insufficient Balance", rate limit) instead of a generic HTTP error.
+            raise RuntimeError(f"DeepSeek API {r.status_code} at "
+                               f"{settings.DEEPSEEK_BASE_URL} (model "
+                               f"'{settings.DEEPSEEK_MODEL}'): {r.text[:400]}")
         body = r.json()
         usage = body.get("usage", {})
         text = body["choices"][0]["message"]["content"]
@@ -116,7 +121,9 @@ class ClaudeProvider(AIProvider):
             },
             timeout=120,
         )
-        r.raise_for_status()
+        if not r.ok:
+            raise RuntimeError(f"Anthropic API {r.status_code} (model "
+                               f"'{settings.CLAUDE_MODEL}'): {r.text[:400]}")
         body = r.json()
         usage = body.get("usage", {})
         text = body["content"][0]["text"]

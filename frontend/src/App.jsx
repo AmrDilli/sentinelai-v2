@@ -47,10 +47,16 @@ export default function App() {
   const [timeFilter, setTimeFilter] = useState("All Time");
   const seen = useRef({});
 
-  // Restore session on load if a token exists.
+  // Restore session on load if a token exists. Never block the UI forever: if
+  // the backend is down or slow to answer /auth/me, fall through to the auth
+  // screen after a short timeout instead of spinning on "Loading…".
   useEffect(() => {
     if (!getToken()) { setAuthChecked(true); return; }
-    me().then(setUser).catch(() => setUser(null)).finally(() => setAuthChecked(true));
+    let settled = false;
+    const finish = () => { if (!settled) { settled = true; setAuthChecked(true); } };
+    me().then(setUser).catch(() => setUser(null)).finally(finish);
+    const t = setTimeout(finish, 6000);
+    return () => clearTimeout(t);
   }, []);
 
   // Apply a fresh analyses list: fire status-change toasts, then store it.
