@@ -1,4 +1,6 @@
-"""Central configuration. All settings come from environment variables (.env)."""
+"""Central configuration. Values come from environment variables (.env) and can
+be overridden at runtime from the Settings UI (persisted to runtime_config.json)."""
+import json
 import os
 from pathlib import Path
 
@@ -42,6 +44,41 @@ class Settings:
     SOAR_APPROVAL_THRESHOLD: int = 40  # medium
     SOAR_AUTO_THRESHOLD: int = 70      # high/critical
 
+    # Keys/provider that can be set live from the Settings UI.
+    RUNTIME_KEYS = ("AI_PROVIDER", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY",
+                    "ABUSEIPDB_API_KEY", "VIRUSTOTAL_API_KEY")
+
+    @property
+    def _runtime_path(self) -> Path:
+        return self.UPLOAD_DIR / "runtime_config.json"
+
+    def apply_runtime(self):
+        """Overlay any keys saved from the UI on top of the .env defaults."""
+        try:
+            if self._runtime_path.exists():
+                for k, v in json.loads(self._runtime_path.read_text()).items():
+                    if k in self.RUNTIME_KEYS and isinstance(v, str):
+                        setattr(self, k, v)
+        except Exception:
+            pass
+
+    def update_keys(self, updates: dict) -> dict:
+        """Apply key/provider changes live AND persist them. Returns applied keys."""
+        applied = {k: str(v) for k, v in updates.items() if k in self.RUNTIME_KEYS}
+        for k, v in applied.items():
+            setattr(self, k, v)
+        try:
+            existing = {}
+            if self._runtime_path.exists():
+                existing = json.loads(self._runtime_path.read_text())
+            existing.update(applied)
+            self._runtime_path.parent.mkdir(parents=True, exist_ok=True)
+            self._runtime_path.write_text(json.dumps(existing, indent=1))
+        except Exception:
+            pass
+        return applied
+
 
 settings = Settings()
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+settings.apply_runtime()

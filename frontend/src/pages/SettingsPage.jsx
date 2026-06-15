@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { IconChip, IconCloud, IconNetwork, IconShield, IconCheck } from "../components/icons.jsx";
-import { refreshThreatIntel } from "../api/client.js";
+import { refreshThreatIntel, getSettings, updateSettings } from "../api/client.js";
 
 function Integration({ Icon, color, name, desc, connected, detail }) {
   return (
@@ -21,13 +21,43 @@ function Integration({ Icon, color, name, desc, connected, detail }) {
   );
 }
 
-export default function SettingsPage({ health, toast }) {
-  const provider = health?.ai_provider || "mock";
-  const aiConnected = provider !== "mock";
+const BLANK = { ai_provider: "", deepseek_api_key: "", anthropic_api_key: "", abuseipdb_api_key: "", virustotal_api_key: "" };
 
+export default function SettingsPage({ health, toast }) {
+  const [cfg, setCfg] = useState(null);
+  const [form, setForm] = useState(BLANK);
+  const [saving, setSaving] = useState(false);
   const [intel, setIntel] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => { getSettings().then(setCfg).catch(() => {}); }, []);
+
+  const selectedProvider = form.ai_provider || cfg?.ai_provider || health?.ai_provider || "mock";
+  const activeProvider = cfg?.active_provider || selectedProvider;
+  const aiConnected = activeProvider !== "mock";
+  const keySet = (k) => cfg?.keys?.[k] ?? !!health?.enrichment?.[k];
   const ti = intel || health?.threat_intel || {};
+
+  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const save = async () => {
+    const updates = {};
+    if (form.ai_provider) updates.ai_provider = form.ai_provider;
+    for (const f of ["deepseek_api_key", "anthropic_api_key", "abuseipdb_api_key", "virustotal_api_key"]) {
+      if (form[f].trim()) updates[f] = form[f].trim();
+    }
+    if (!Object.keys(updates).length) { toast?.("Nothing to save", "info"); return; }
+    setSaving(true);
+    try {
+      setCfg(await updateSettings(updates));
+      setForm(BLANK);
+      toast?.("Settings saved — applied live, no restart needed", "success");
+    } catch (e) {
+      toast?.(e.message, "critical");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const doRefresh = async () => {
     setRefreshing(true);
@@ -45,6 +75,14 @@ export default function SettingsPage({ health, toast }) {
     }
   };
 
+  const KeyField = ({ label, field, set: setKey }) => (
+    <label className="key-field">
+      <span>{label} {keySet(setKey) && <em className="key-ok">configured</em>}</span>
+      <input type="password" autoComplete="off" value={form[field]} onChange={set(field)}
+        placeholder={keySet(setKey) ? "•••••••• (leave blank to keep)" : "paste key to enable"} />
+    </label>
+  );
+
   return (
     <div className="view-enter">
       <div className="page-head"><h1>Settings &amp; Integrations</h1>
@@ -53,7 +91,7 @@ export default function SettingsPage({ health, toast }) {
       <div className="kpi-grid" style={{ marginBottom: 24 }}>
         <div className="kpi"><div className="kpi-top"><span className="kpi-label">AI Engine</span>
           <span className="kpi-icon" style={{ background: "color-mix(in srgb, var(--brand) 16%, transparent)", color: "var(--brand)" }}><IconChip size={20} /></span></div>
-          <div className="kpi-val" style={{ fontSize: 26 }}>{provider}</div>
+          <div className="kpi-val" style={{ fontSize: 26 }}>{activeProvider}</div>
           <div className={`kpi-delta ${aiConnected ? "down" : "flat"}`}>{aiConnected ? "live reasoning" : "offline / mock"}</div></div>
         <div className="kpi"><div className="kpi-top"><span className="kpi-label">Self-Verify</span>
           <span className="kpi-icon" style={{ background: "color-mix(in srgb, var(--green) 16%, transparent)", color: "var(--green)" }}><IconCheck size={20} /></span></div>
@@ -69,18 +107,46 @@ export default function SettingsPage({ health, toast }) {
           <div className="kpi-delta down">FastAPI</div></div>
       </div>
 
-      <div className="page-head" style={{ marginBottom: 14 }}><h1 style={{ fontSize: 20 }}>Threat-Intel Integrations</h1>
-        <span className="sub">Connect enrichment sources via .env keys</span></div>
+      {/* Editable API keys + provider — saved server-side, applied live */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card-title">API Keys &amp; AI Provider
+          <span className="h2-actions">
+            <button className="btn sm primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+          </span>
+        </div>
+        <p className="dim" style={{ fontSize: 12.5, marginBottom: 14 }}>
+          Keys are stored on the server and applied immediately — no restart, no editing files.
+          They are never sent back to the browser; blank fields keep the existing value.
+        </p>
+        <div className="key-grid">
+          <label className="key-field">
+            <span>AI provider</span>
+            <select className="tb-select" value={selectedProvider}
+              onChange={(e) => setForm((f) => ({ ...f, ai_provider: e.target.value }))}>
+              <option value="mock">mock (offline, no key)</option>
+              <option value="deepseek">deepseek</option>
+              <option value="claude">claude</option>
+            </select>
+          </label>
+          <KeyField label="DeepSeek API key" field="deepseek_api_key" set="deepseek" />
+          <KeyField label="Anthropic (Claude) API key" field="anthropic_api_key" set="anthropic" />
+          <KeyField label="AbuseIPDB API key" field="abuseipdb_api_key" set="abuseipdb" />
+          <KeyField label="VirusTotal API key" field="virustotal_api_key" set="virustotal" />
+        </div>
+      </div>
+
+      <div className="page-head" style={{ marginBottom: 14 }}><h1 style={{ fontSize: 20 }}>Connectors</h1>
+        <span className="sub">Live status of each enrichment source</span></div>
       <div className="intg-grid">
         <Integration Icon={IconChip} color="#6366f1" name="DeepSeek / Claude"
-          desc="AI reasoning engine. Switch via AI_PROVIDER in .env."
-          connected={aiConnected} detail={provider} />
+          desc="AI reasoning engine. Choose the provider and key above."
+          connected={aiConnected} detail={activeProvider} />
         <Integration Icon={IconNetwork} color="#f97316" name="AbuseIPDB"
           desc="IP reputation enrichment for the network module."
-          connected={!!health?.enrichment?.abuseipdb} detail={health?.enrichment?.abuseipdb ? "key set" : "—"} />
+          connected={keySet("abuseipdb")} detail={keySet("abuseipdb") ? "key set" : "—"} />
         <Integration Icon={IconShield} color="#22c55e" name="VirusTotal"
           desc="File-hash reputation for the malware module."
-          connected={!!health?.enrichment?.virustotal} detail={health?.enrichment?.virustotal ? "key set" : "—"} />
+          connected={keySet("virustotal")} detail={keySet("virustotal") ? "key set" : "—"} />
         <Integration Icon={IconCloud} color="#38bdf8" name="IP Geolocation"
           desc="Keyless geolocation (ip-api.com) — powers the world map."
           connected detail="keyless" />
@@ -107,15 +173,6 @@ export default function SettingsPage({ health, toast }) {
           <div className="stat-box"><div className="stat-val">{ti.ips ?? "—"}</div><div className="stat-lbl">Known-bad IPs</div></div>
           <div className="stat-box"><div className="stat-val">{ti.domains ?? "—"}</div><div className="stat-lbl">Known-bad domains</div></div>
         </div>
-      </div>
-
-      <div className="card" style={{ marginTop: 24 }}>
-        <div className="card-title">How to configure</div>
-        <p className="dim" style={{ lineHeight: 1.7, fontSize: 13 }}>
-          Edit the <code style={{ color: "var(--brand)" }}>.env</code> file in the project root and restart the backend.
-          Set <code style={{ color: "var(--accent)" }}>AI_PROVIDER=deepseek</code> (or <code style={{ color: "var(--accent)" }}>claude</code>) with the matching API key to enable live AI analysis.
-          Add <code style={{ color: "var(--accent)" }}>ABUSEIPDB_API_KEY</code> and <code style={{ color: "var(--accent)" }}>VIRUSTOTAL_API_KEY</code> (free tiers) to light up the enrichment connectors above.
-        </p>
       </div>
     </div>
   );

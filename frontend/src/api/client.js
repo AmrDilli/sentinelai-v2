@@ -83,6 +83,15 @@ export async function explainFinding(analysisId, findingIndex) {
     body: JSON.stringify({ finding_index: findingIndex }),
   }));
 }
+export async function getSettings() {
+  return asJson(await fetch(`${BASE}/settings`, { headers: authHeaders() }));
+}
+export async function updateSettings(updates) {
+  return asJson(await fetch(`${BASE}/settings/keys`, {
+    method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(updates),
+  }));
+}
 export async function refreshThreatIntel() {
   return asJson(await fetch(`${BASE}/threatintel/refresh`, { method: "POST", headers: authHeaders() }));
 }

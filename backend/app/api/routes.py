@@ -321,6 +321,45 @@ def health():
     }
 
 
+def _settings_status() -> dict:
+    from app.ai.provider import get_provider
+    return {
+        "ai_provider": settings.AI_PROVIDER,        # what the user selected
+        "active_provider": get_provider().name,     # what's actually in use (mock if no key)
+        "keys": {                                   # only whether set — never the values
+            "deepseek": bool(settings.DEEPSEEK_API_KEY),
+            "anthropic": bool(settings.ANTHROPIC_API_KEY),
+            "abuseipdb": bool(settings.ABUSEIPDB_API_KEY),
+            "virustotal": bool(settings.VIRUSTOTAL_API_KEY),
+        },
+    }
+
+
+@router.get("/settings")
+def get_settings(user: dict = Depends(current_user)):
+    return _settings_status()
+
+
+@router.post("/settings/keys")
+def update_settings(body: dict = Body(...), user: dict = Depends(current_user)):
+    """Set AI provider / API keys live from the Settings UI (persisted, no
+    restart needed). Only fields present in the body are changed."""
+    field_to_attr = {
+        "ai_provider": "AI_PROVIDER", "deepseek_api_key": "DEEPSEEK_API_KEY",
+        "anthropic_api_key": "ANTHROPIC_API_KEY", "abuseipdb_api_key": "ABUSEIPDB_API_KEY",
+        "virustotal_api_key": "VIRUSTOTAL_API_KEY",
+    }
+    updates = {}
+    for field, attr in field_to_attr.items():
+        if field in body and body[field] is not None:
+            val = str(body[field]).strip()
+            if field == "ai_provider" and val not in ("mock", "deepseek", "claude"):
+                raise HTTPException(400, "ai_provider must be mock, deepseek, or claude")
+            updates[attr] = val
+    settings.update_keys(updates)
+    return _settings_status()
+
+
 @router.post("/threatintel/refresh")
 def threatintel_refresh(user: dict = Depends(current_user)):
     """Pull a fresh indicator set from abuse.ch and merge it over the bundled

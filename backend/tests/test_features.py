@@ -35,6 +35,21 @@ def _seed_completed(user_id):
 
 
 # ---- Feature 1: PDF report --------------------------------------------------
+def test_settings_update_keys_live(client, tmp_path, monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "UPLOAD_DIR", tmp_path)  # isolate runtime config
+    token, user = _auth(client)
+    h = {"Authorization": f"Bearer {token}"}
+    r = client.post("/api/settings/keys",
+                    json={"virustotal_api_key": "secret-abc", "ai_provider": "deepseek"}, headers=h)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["keys"]["virustotal"] is True and body["ai_provider"] == "deepseek"
+    assert "secret-abc" not in str(body)                 # never leak the key value back
+    assert settings.VIRUSTOTAL_API_KEY == "secret-abc"   # applied live
+    assert client.post("/api/settings/keys", json={"ai_provider": "bogus"}, headers=h).status_code == 400
+
+
 def test_pdf_generation_unit():
     from app.core import report_pdf
     from app.pipeline import orchestrator
