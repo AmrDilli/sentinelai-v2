@@ -112,6 +112,24 @@ def test_explain_endpoint(client):
     assert body.get("finding_title")
 
 
+def test_triage_set_and_clear(client):
+    token, user = _auth(client)
+    _seed_completed(user["id"])
+    h = {"Authorization": f"Bearer {token}"}
+    # set escalated on finding 0
+    r = client.post("/api/analyses/case1/triage", json={"finding_index": 0, "status": "escalated"}, headers=h)
+    assert r.status_code == 200 and r.json()["triage"] == {"0": "escalated"}
+    # it shows up in the list payload
+    items = client.get("/api/analyses", headers=h).json()["analyses"]
+    assert items[0]["triage"] == {"0": "escalated"}
+    # 'new' clears it
+    r = client.post("/api/analyses/case1/triage", json={"finding_index": 0, "status": "new"}, headers=h)
+    assert r.json()["triage"] == {}
+    # bad status / index rejected
+    assert client.post("/api/analyses/case1/triage", json={"finding_index": 0, "status": "bogus"}, headers=h).status_code == 400
+    assert client.post("/api/analyses/case1/triage", json={"finding_index": 99, "status": "acknowledged"}, headers=h).status_code == 400
+
+
 def test_explain_bad_index(client):
     token, user = _auth(client)
     _seed_completed(user["id"])

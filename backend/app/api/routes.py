@@ -145,8 +145,40 @@ def _serialize_analyses(user_id: str) -> list[dict]:
             # (Dashboard, Alerts, Trends, Reports) can render without an extra
             # round-trip per case. Running/failed cases carry no report yet.
             "report": report or None,
+            # Per-finding triage state: {"<finding_index>": "acknowledged"|...}.
+            "triage": a.get("triage", {}),
         })
     return items
+
+
+TRIAGE_STATES = {"new", "acknowledged", "dismissed", "escalated"}
+
+
+@router.post("/analyses/{analysis_id}/triage")
+def set_triage(analysis_id: str, body: dict = Body(...), user: dict = Depends(current_user)):
+    """Set a finding's triage state (new / acknowledged / dismissed / escalated).
+    'new' clears any prior state. Lets analysts work the alert queue."""
+    status = str(body.get("status", "new"))
+    if status not in TRIAGE_STATES:
+        raise HTTPException(400, f"status must be one of {sorted(TRIAGE_STATES)}")
+    try:
+        index = int(body.get("finding_index", -1))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "finding_index must be an integer")
+    with _LOCK:
+        a = store.get(analysis_id, user["id"])
+        if not a or "report" not in a:
+            raise HTTPException(404, "Completed analysis not found")
+        if not 0 <= index < len(a["report"].get("findings", [])):
+            raise HTTPException(400, "finding_index out of range")
+        triage = dict(a.get("triage") or {})
+        if status == "new":
+            triage.pop(str(index), None)
+        else:
+            triage[str(index)] = status
+        a["triage"] = triage
+        store.upsert(a)
+    return {"ok": True, "triage": triage}
 
 
 @router.get("/analyses")

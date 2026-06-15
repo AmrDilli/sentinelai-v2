@@ -71,6 +71,12 @@ export async function approveAction(analysisId, actionIndex) {
 export async function deleteAnalysis(id) {
   return asJson(await fetch(`${BASE}/analyses/${id}`, { method: "DELETE", headers: authHeaders() }));
 }
+export async function setTriage(analysisId, findingIndex, status) {
+  return asJson(await fetch(`${BASE}/analyses/${analysisId}/triage`, {
+    method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ finding_index: findingIndex, status }),
+  }));
+}
 export async function explainFinding(analysisId, findingIndex) {
   return asJson(await fetch(`${BASE}/analyses/${analysisId}/explain`, {
     method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
