@@ -16,7 +16,8 @@ export default function Sidebar({ view, setView, alertCount, theme, toggleTheme,
   const live = mode === "live";
   return (
     <aside className="sidebar">
-      <div className="brand">
+      <div className="brand" onClick={() => { setMode("file"); setView("dashboard"); }}
+        role="button" title="Go to dashboard" style={{ cursor: "pointer" }}>
         <div className="brand-logo"><IconShield size={22} /></div>
         <div className="brand-name">Sentinel<span>AI</span></div>
       </div>
