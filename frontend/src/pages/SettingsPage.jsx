@@ -36,7 +36,18 @@ export default function SettingsPage({ health, toast }) {
   const activeProvider = cfg?.active_provider || selectedProvider;
   const aiConnected = activeProvider !== "mock";
   const keySet = (k) => cfg?.keys?.[k] ?? !!health?.enrichment?.[k];
+  const selfVerify = cfg?.self_verify ?? !!health?.self_verify;
+  const cacheOn = cfg?.cache ?? !!health?.cache;
   const ti = intel || health?.threat_intel || {};
+
+  const toggle = async (field, value) => {
+    try {
+      setCfg(await updateSettings({ [field]: value }));
+      toast?.(`${field === "self_verify" ? "Self-verify" : "Response cache"} ${value ? "enabled" : "disabled"}`, "success");
+    } catch (e) {
+      toast?.(e.message, "critical");
+    }
+  };
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
@@ -95,11 +106,11 @@ export default function SettingsPage({ health, toast }) {
           <div className={`kpi-delta ${aiConnected ? "down" : "flat"}`}>{aiConnected ? "live reasoning" : "offline / mock"}</div></div>
         <div className="kpi"><div className="kpi-top"><span className="kpi-label">Self-Verify</span>
           <span className="kpi-icon" style={{ background: "color-mix(in srgb, var(--green) 16%, transparent)", color: "var(--green)" }}><IconCheck size={20} /></span></div>
-          <div className="kpi-val" style={{ fontSize: 26 }}>{health?.self_verify ? "On" : "Off"}</div>
+          <div className="kpi-val" style={{ fontSize: 26 }}>{selfVerify ? "On" : "Off"}</div>
           <div className="kpi-delta flat">AI_SELF_VERIFY</div></div>
         <div className="kpi"><div className="kpi-top"><span className="kpi-label">Response Cache</span>
           <span className="kpi-icon" style={{ background: "color-mix(in srgb, var(--accent) 16%, transparent)", color: "var(--accent)" }}><IconShield size={20} /></span></div>
-          <div className="kpi-val" style={{ fontSize: 26 }}>{health?.cache ? "On" : "Off"}</div>
+          <div className="kpi-val" style={{ fontSize: 26 }}>{cacheOn ? "On" : "Off"}</div>
           <div className="kpi-delta flat">AI_CACHE</div></div>
         <div className="kpi"><div className="kpi-top"><span className="kpi-label">Backend</span>
           <span className="kpi-icon" style={{ background: "color-mix(in srgb, var(--green) 16%, transparent)", color: "var(--green)" }}><IconNetwork size={20} /></span></div>
@@ -132,6 +143,22 @@ export default function SettingsPage({ health, toast }) {
           <KeyField label="Anthropic (Claude) API key" field="anthropic_api_key" set="anthropic" />
           <KeyField label="AbuseIPDB API key" field="abuseipdb_api_key" set="abuseipdb" />
           <KeyField label="VirusTotal API key" field="virustotal_api_key" set="virustotal" />
+        </div>
+        <div className="ai-toggles">
+          <div className="ai-toggle">
+            <div className={`switch ${selfVerify ? "on" : ""}`} onClick={() => toggle("self_verify", !selfVerify)} />
+            <div>
+              <div className="at-name">AI Self-Verify</div>
+              <div className="at-desc muted">A second AI pass critiques and corrects its own findings — higher accuracy, ~2× cost/latency. Real providers only (no effect on mock).</div>
+            </div>
+          </div>
+          <div className="ai-toggle">
+            <div className={`switch ${cacheOn ? "on" : ""}`} onClick={() => toggle("cache", !cacheOn)} />
+            <div>
+              <div className="at-name">Response Cache</div>
+              <div className="at-desc muted">Reuse the AI result for identical inputs — faster, cheaper repeat analyses.</div>
+            </div>
+          </div>
         </div>
       </div>
 

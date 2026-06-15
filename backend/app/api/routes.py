@@ -326,6 +326,8 @@ def _settings_status() -> dict:
     return {
         "ai_provider": settings.AI_PROVIDER,        # what the user selected
         "active_provider": get_provider().name,     # what's actually in use (mock if no key)
+        "self_verify": settings.AI_SELF_VERIFY,
+        "cache": settings.AI_CACHE,
         "keys": {                                   # only whether set — never the values
             "deepseek": bool(settings.DEEPSEEK_API_KEY),
             "anthropic": bool(settings.ANTHROPIC_API_KEY),
@@ -356,6 +358,10 @@ def update_settings(body: dict = Body(...), user: dict = Depends(current_user)):
             if field == "ai_provider" and val not in ("mock", "deepseek", "claude"):
                 raise HTTPException(400, "ai_provider must be mock, deepseek, or claude")
             updates[attr] = val
+    # Boolean toggles
+    for field, attr in {"self_verify": "AI_SELF_VERIFY", "cache": "AI_CACHE"}.items():
+        if field in body and body[field] is not None:
+            updates[attr] = bool(body[field])
     settings.update_keys(updates)
     return _settings_status()
 

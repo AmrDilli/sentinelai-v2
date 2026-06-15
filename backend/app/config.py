@@ -44,27 +44,35 @@ class Settings:
     SOAR_APPROVAL_THRESHOLD: int = 40  # medium
     SOAR_AUTO_THRESHOLD: int = 70      # high/critical
 
-    # Keys/provider that can be set live from the Settings UI.
+    # Settings that can be changed live from the Settings UI.
     RUNTIME_KEYS = ("AI_PROVIDER", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY",
-                    "ABUSEIPDB_API_KEY", "VIRUSTOTAL_API_KEY")
+                    "ABUSEIPDB_API_KEY", "VIRUSTOTAL_API_KEY")   # strings
+    RUNTIME_TOGGLES = ("AI_SELF_VERIFY", "AI_CACHE")             # booleans
 
     @property
     def _runtime_path(self) -> Path:
         return self.UPLOAD_DIR / "runtime_config.json"
 
     def apply_runtime(self):
-        """Overlay any keys saved from the UI on top of the .env defaults."""
+        """Overlay settings saved from the UI on top of the .env defaults."""
         try:
             if self._runtime_path.exists():
                 for k, v in json.loads(self._runtime_path.read_text()).items():
                     if k in self.RUNTIME_KEYS and isinstance(v, str):
                         setattr(self, k, v)
+                    elif k in self.RUNTIME_TOGGLES and isinstance(v, bool):
+                        setattr(self, k, v)
         except Exception:
             pass
 
     def update_keys(self, updates: dict) -> dict:
-        """Apply key/provider changes live AND persist them. Returns applied keys."""
-        applied = {k: str(v) for k, v in updates.items() if k in self.RUNTIME_KEYS}
+        """Apply key/provider/toggle changes live AND persist them."""
+        applied = {}
+        for k, v in updates.items():
+            if k in self.RUNTIME_KEYS:
+                applied[k] = str(v)
+            elif k in self.RUNTIME_TOGGLES:
+                applied[k] = bool(v)
         for k, v in applied.items():
             setattr(self, k, v)
         try:
