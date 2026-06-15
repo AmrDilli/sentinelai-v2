@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { IconNetwork, IconChip, IconCloud, IconCheck, IconAlert } from "../components/icons.jsx";
 import { setTriage } from "../api/client.js";
 
@@ -30,12 +30,22 @@ function buildAlerts(analyses, overrides) {
     || RANK[y.severity] - RANK[x.severity]);
 }
 
-export default function AlertsPage({ analyses, onOpen, onGoToInvestigations }) {
+export default function AlertsPage({ analyses, onOpen, onGoToInvestigations, focus: arriveFocus }) {
   const [focus, setFocus] = useState(false);
   const [sev, setSev] = useState("all");
   const [mod, setMod] = useState("all");
   const [showDismissed, setShowDismissed] = useState(false);
   const [overrides, setOverrides] = useState({});
+  const [flash, setFlash] = useState(null);
+
+  // Arriving from a dashboard KPI: filter to that severity and glow its tile briefly.
+  useEffect(() => {
+    if (!arriveFocus?.sev) return;
+    setSev(arriveFocus.sev);
+    setFlash(arriveFocus.sev);
+    const t = setTimeout(() => setFlash(null), 2800);
+    return () => clearTimeout(t);
+  }, [arriveFocus?.ts]);
 
   const triage = (e, alert, status) => {
     e.stopPropagation();
@@ -67,7 +77,7 @@ export default function AlertsPage({ analyses, onOpen, onGoToInvestigations }) {
 
       <div className="queue-stats">
         {SEV_ORDER.map((s) => (
-          <button key={s} className={`qstat ${s} ${sev === s ? "active" : ""}`}
+          <button key={s} className={`qstat ${s} ${sev === s ? "active" : ""} ${flash === s ? "flash" : ""}`}
             onClick={() => setSev(sev === s ? "all" : s)}>
             <span className="qstat-num">{counts[s]}</span>
             <span className="qstat-lbl">{s}</span>

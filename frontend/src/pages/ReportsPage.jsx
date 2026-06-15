@@ -16,10 +16,11 @@ export default function ReportsPage({ analyses, onOpen }) {
       ) : (
         <div className="card">
           <table className="tbl">
-            <thead><tr><th>Artifact</th><th>Module</th><th>Severity</th><th>Score</th><th>Findings</th><th>Generated</th><th>Export</th></tr></thead>
+            <thead><tr><th>Case</th><th>Artifact</th><th>Module</th><th>Severity</th><th>Score</th><th>Findings</th><th>Generated</th><th>Export</th></tr></thead>
             <tbody>
               {done.map((a) => (
                 <tr key={a.id}>
+                  <td><code style={{ color: "var(--brand)", fontSize: 12 }}>{a.case_number || "—"}</code></td>
                   <td style={{ cursor: "pointer" }} onClick={() => onOpen(a.id)}>{a.filename}</td>
                   <td className="dim" style={{ textTransform: "uppercase", fontSize: 11 }}>{a.module}</td>
                   <td><span className={`badge ${a.severity}`}>{a.severity}</span></td>

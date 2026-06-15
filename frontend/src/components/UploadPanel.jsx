@@ -6,9 +6,7 @@ import { IconUpload } from "./icons.jsx";
 // + a friendly client-side check; the server is the real enforcement boundary.
 const ALLOWED = [
   ".pcap", ".cap", ".pcapng", ".evtx", ".xml", ".jsonl", ".json",
-  ".exe", ".dll", ".sys", ".scr", ".com", ".bin", ".dat", ".msi", ".ps1",
-  ".vbs", ".bat", ".js", ".jar", ".hta", ".lnk", ".doc", ".docx", ".xls",
-  ".xlsx", ".rtf", ".pdf", ".zip", ".elf", ".o", ".so", ".apk",
+  ".exe", ".dll", ".sys", ".scr", ".com", ".bin", ".dat",
 ];
 const extOf = (name) => { const i = (name || "").lastIndexOf("."); return i < 0 ? "" : name.slice(i).toLowerCase(); };
 

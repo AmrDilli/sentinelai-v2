@@ -39,7 +39,7 @@ export default function InvestigationsPage({
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="nm" style={{ fontSize: 13 }}>{a.filename}</div>
                   <div className="muted" style={{ fontSize: 11 }}>
-                    {a.module}{a.score != null ? ` · ${a.score}` : ""}
+                    {a.case_number ? <code style={{ color: "var(--brand)" }}>{a.case_number}</code> : null} {a.module}{a.score != null ? ` · ${a.score}` : ""}
                   </div>
                   {a.status === "running" && (
                     <div className="mini-progress"><div className="mini-bar" style={{ width: `${a.progress || 0}%` }} /></div>

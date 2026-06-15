@@ -86,10 +86,10 @@ export default function DashboardPage({ analyses, onOpen, onNavigate }) {
       <div className="kpi-grid">
         <KpiCard index={0} label="Critical Alerts" value={dist.critical} color="var(--critical)" Icon={IconAlert}
           delta={dist.critical > 0 ? "Immediate action" : "None active"} deltaDir={dist.critical > 0 ? "up" : "down"}
-          onClick={() => onNavigate("alerts")} />
+          onClick={() => onNavigate("alerts", "critical")} />
         <KpiCard index={1} label="High Alerts" value={dist.high} color="var(--high)" Icon={IconPulse}
           delta={dist.high > 0 ? "Investigate soon" : "None active"} deltaDir={dist.high > 0 ? "up" : "down"}
-          onClick={() => onNavigate("alerts")} />
+          onClick={() => onNavigate("alerts", "high")} />
         <KpiCard index={2} label="Known-Bad Indicators" value={knownBad.length} color="var(--critical)" Icon={IconBell}
           delta="intel-confirmed" deltaDir={knownBad.length > 0 ? "up" : "flat"}
           onClick={() => onNavigate("alerts")} />
@@ -163,6 +163,7 @@ export default function DashboardPage({ analyses, onOpen, onNavigate }) {
             {done.slice(0, 8).map((a) => (
               <div key={a.id} className="rrow" onClick={() => onOpen(a.id)}>
                 <span className="dot" style={{ background: SEV_COLOR[a.severity] || "#64748b" }} />
+                {a.case_number && <code className="case-tag">{a.case_number}</code>}
                 <span className="nm">{a.filename}</span>
                 <span className={`badge ${a.severity}`}>{a.severity}</span>
                 <span className="ct" style={{ color: SEV_COLOR[a.severity], minWidth: 44, textAlign: "right" }}>{a.score}</span>

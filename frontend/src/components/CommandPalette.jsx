@@ -31,9 +31,9 @@ export default function CommandPalette({ analyses, onOpen, views, setView }) {
     }
     for (const a of analyses) {
       if (a.status !== "completed") continue;
-      const hay = `${a.filename} ${a.module} ${a.severity}`.toLowerCase();
+      const hay = `${a.case_number || ""} ${a.filename} ${a.module} ${a.severity}`.toLowerCase();
       if (!term || hay.includes(term))
-        out.push({ type: "case", id: a.id, label: a.filename, sub: `${a.module} · ${a.severity} · score ${a.score}`, severity: a.severity });
+        out.push({ type: "case", id: a.id, label: a.filename, sub: `${a.case_number ? a.case_number + " · " : ""}${a.module} · ${a.severity} · score ${a.score}`, severity: a.severity });
       for (const f of a.report?.findings || []) {
         if (term && `${f.title} ${f.description}`.toLowerCase().includes(term))
           out.push({ type: "case", id: a.id, label: f.title, sub: `finding in ${a.filename}`, severity: f.severity });

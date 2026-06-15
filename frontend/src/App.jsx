@@ -33,6 +33,7 @@ import TrendsPage from "./pages/TrendsPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import LiveCapturePage from "./pages/LiveCapturePage.jsx";
+import CasePage from "./pages/CasePage.jsx";
 
 export default function App() {
   const toast = useToast();
@@ -48,6 +49,8 @@ export default function App() {
   const [correlated, setCorrelated] = useState(null);
   const [health, setHealth] = useState(null);
   const [timeFilter, setTimeFilter] = useState("All Time");
+  const [caseOrigin, setCaseOrigin] = useState("alerts");
+  const [alertsFocus, setAlertsFocus] = useState(null);
   const seen = useRef({});
 
   // Restore session on load if a token exists. Never block the UI forever: if
@@ -124,7 +127,13 @@ export default function App() {
     getAnalysis(selectedId).then(setReport).catch(() => setReport(null));
   }, [selectedId, analyses]);
 
-  const openCase = (id) => { setCorrelated(null); setSelectedId(id); setView("investigations"); };
+  // Open a case in the focused single-artifact view (remembers where to go back to).
+  const openCase = (id) => {
+    setCorrelated(null);
+    setSelectedId(id);
+    setCaseOrigin((v) => (view === "case" ? v : view));
+    setView("case");
+  };
 
   const runCorrelation = async () => {
     try {
@@ -157,14 +166,18 @@ export default function App() {
         mode={mode} setMode={setMode} />
       <div className="main">
         <Topbar analyses={visible} backendUp={!!health} timeFilter={timeFilter}
-          setTimeFilter={setTimeFilter} user={user} onLogout={handleLogout} />
+          setTimeFilter={setTimeFilter} user={user} onLogout={handleLogout}
+          onOpenCase={openCase} onViewAlerts={() => { setView("alerts"); setCorrelated(null); }} />
         <div className="content">
           {mode === "live" && <LiveCapturePage />}
           {mode === "file" && <>
           {view === "dashboard" && <DashboardPage analyses={visible} onOpen={openCase}
-            onNavigate={(v) => { setView(v); setCorrelated(null); }} />}
-          {view === "alerts" && <AlertsPage analyses={visible} onOpen={openCase}
+            onNavigate={(v, focus) => { setView(v); setCorrelated(null); if (v === "alerts" && focus) setAlertsFocus({ sev: focus, ts: Date.now() }); }} />}
+          {view === "alerts" && <AlertsPage analyses={visible} onOpen={openCase} focus={alertsFocus}
             onGoToInvestigations={() => { setView("investigations"); setCorrelated(null); }} />}
+          {view === "case" && <CasePage report={report}
+            onBack={() => { setView(caseOrigin); setCorrelated(null); }}
+            onChanged={() => getAnalysis(selectedId).then(setReport)} />}
           {view === "investigations" && (
             <InvestigationsPage
               analyses={visible} selectedId={selectedId} report={report}
