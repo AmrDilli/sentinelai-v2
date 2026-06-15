@@ -190,23 +190,51 @@ def preprocess(events: list[LogEvent], source_file: str) -> Summary:
             mitre_hints=["T1562.001"],
         ))
 
-    # 5. RDP lateral movement: external/unusual IP driving an interactive (type 10) logon
-    rdp_logons = [e for e in events if e.event_id == 4624
-                  and e.data.get("LogonType") == "10"]
-    ext_rdp = [e for e in rdp_logons
-               if e.data.get("IpAddress") and not e.data["IpAddress"].startswith(
-                   ("10.", "192.168.", "172.", "127.", "-", "::1"))]
-    if ext_rdp:
+    # 5. Lateral movement: RDP (type 10, internal OR external), explicit-credential
+    #    logons (pass-the-hash / runas), and one account spreading across many hosts.
+    def _is_private(ip):
+        return (not ip) or ip.startswith(("10.", "192.168.", "172.", "127.",
+                                          "169.254.", "-", "::1", "fe80", "0:0"))
+
+    rdp = [e for e in events if e.event_id == 4624 and str(e.data.get("LogonType")) == "10"]
+    explicit = [e for e in events if e.event_id == 4648]
+    # distinct destination hosts each (human) account authenticated to
+    acct_hosts: dict[str, set] = defaultdict(set)
+    for e in events:
+        if e.event_id in (4624, 4648):
+            user = (e.data.get("TargetUserName") or e.data.get("SubjectUserName") or "").lower()
+            if (user and user not in ("-", "system", "anonymous logon", "local service",
+                                      "network service") and not user.endswith("$") and e.computer):
+                acct_hosts[user].add(e.computer)
+
+    signals, mitre, src_ips = [], set(), set()
+    if rdp:
+        ips = sorted({e.data.get("IpAddress", "?") for e in rdp})
+        src_ips.update(ips)
+        scope = "external" if any(not _is_private(i) for i in ips) else "internal"
+        signals.append(f"{len(rdp)} interactive RDP (type-10) logon(s) from {scope} "
+                       f"source(s) ({', '.join(ips[:3])})")
+        mitre.add("T1021.001")
+    if explicit:
+        signals.append(f"{len(explicit)} logon(s) with explicit credentials (4648) — "
+                       "runas / pass-the-hash-style remote auth")
+        mitre.add("T1021")
+    spread = {u: h for u, h in acct_hosts.items() if len(h) >= 3}
+    if spread:
+        u, hosts = max(spread.items(), key=lambda kv: len(kv[1]))
+        signals.append(f"account '{u}' authenticated to {len(hosts)} distinct hosts "
+                       "— lateral spread")
+        mitre.add("T1021")
+    if signals:
         summary.observations.append(new_obs(
-            type="rdp_lateral_movement",
-            description=(f"{len(ext_rdp)} interactive RDP logon(s) from non-local IP(s) "
-                         f"({', '.join(sorted({e.data['IpAddress'] for e in ext_rdp})[:3])}) "
-                         "— possible remote/lateral access"),
+            type="lateral_movement",
+            description="Lateral movement indicators — " + "; ".join(signals),
             severity_hint="high",
-            data={"count": len(ext_rdp),
-                  "source_ips": sorted({e.data["IpAddress"] for e in ext_rdp})},
-            timestamps=[ext_rdp[0].timestamp],
-            mitre_hints=["T1021.001"],
+            data={"rdp_logons": len(rdp), "explicit_cred_logons": len(explicit),
+                  "source_ips": sorted(src_ips)[:10],
+                  "hosts_touched": {u: sorted(h) for u, h in spread.items()}},
+            timestamps=[(rdp or explicit)[0].timestamp] if (rdp or explicit) else [],
+            mitre_hints=sorted(mitre) or ["T1021"],
         ))
 
     # 6. Persistence stacking: service install + scheduled task close together

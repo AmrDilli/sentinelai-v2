@@ -132,7 +132,7 @@ def test_forensics_extra_sequences():
     events = for_parser.parse_log(str(SAMPLES / "compromise.xml"))
     summary = for_pre.preprocess(events, "compromise.xml")
     types = {o.type for o in summary.observations}
-    assert "rdp_lateral_movement" in types
+    assert "lateral_movement" in types
     assert "persistence_stacking" in types
     assert "defense_evasion" in types
 
