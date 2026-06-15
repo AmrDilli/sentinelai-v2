@@ -48,8 +48,18 @@ export default function StatsCharts({ summary }) {
     const sections = (summary.observations || [])
       .filter((o) => o.data?.name && typeof o.data?.entropy === "number");
     const data = sections.map((o) => ({ name: o.data.name, value: o.data.entropy }));
+    const cls = stats.classification;
+    const vt = summary.enrichment?.virustotal;
     return (
       <>
+        {cls && (
+          <div className={`malware-verdict ${cls.confidence}`}>
+            <span className="mv-label">Classification</span>
+            <span className="mv-type">{cls.type}</span>
+            <span className="mv-conf">{cls.confidence} confidence</span>
+            {vt && vt.malicious > 0 && <span className="mv-vt">VirusTotal: {vt.malicious} engines</span>}
+          </div>
+        )}
         {data.length > 0 && (
           <ChartBlock title="Section entropy (0–8)" data={data} color="#fb923c" unit="" max={8} />
         )}

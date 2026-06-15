@@ -8,5 +8,6 @@ node_modules/
 dist/
 samples/generated/
 samples/validation/
+samples/malware_types/
 *.db
 .DS_Store

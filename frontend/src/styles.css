@@ -557,6 +557,18 @@ select { font-family: var(--font-body); }
 .geo-badge { font-size: 9px; color: var(--critical); border: 1px solid var(--critical); padding: 1px 6px; border-radius: 4px; }
 
 /* =========================== Telemetry stats =========================== */
+/* Malware classification verdict (AV-style) */
+.malware-verdict {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  padding: 12px 14px; border-radius: 12px;
+  background: color-mix(in srgb, var(--high) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--high) 40%, transparent);
+}
+.malware-verdict.high { background: color-mix(in srgb, var(--critical) 12%, transparent); border-color: color-mix(in srgb, var(--critical) 45%, transparent); }
+.mv-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-mute); }
+.mv-type { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--text); text-shadow: 0 0 16px color-mix(in srgb, var(--critical) 50%, transparent); }
+.mv-conf { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 2px 8px; border-radius: 5px; color: var(--critical); background: color-mix(in srgb, var(--critical) 16%, transparent); }
+.mv-vt { margin-left: auto; font-size: 11px; font-family: var(--font-mono); color: var(--accent); }
 .chart-title { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
 .stat-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .stat-box { flex: 1; min-width: 64px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center; }

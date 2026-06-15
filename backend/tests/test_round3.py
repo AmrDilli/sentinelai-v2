@@ -114,6 +114,18 @@ def test_neutralize_defangs_injection():
     assert analyzer._neutralize("normal log line") == "normal log line"
 
 
+def test_malware_classifier():
+    from app.modules.malware.preprocessor import classify
+    from app.core.schema import Observation
+    keylog = [Observation(id="1", type="capability",
+              description="Imported/embedded APIs indicate keylogging capability: GetAsyncKeyState")]
+    assert classify(keylog)["type"].startswith("Keylogger")
+    ransom = [Observation(id="1", type="capability",
+              description="file-encryption sweep capability (ransomware pattern)")]
+    assert classify(ransom)["type"] == "Ransomware"
+    assert classify([]) is None
+
+
 def test_upload_allowlist():
     from app.pipeline import orchestrator
     assert orchestrator.is_allowed("capture.pcap")
