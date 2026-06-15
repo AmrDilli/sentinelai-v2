@@ -117,6 +117,22 @@ def test_threatintel_lookups():
     assert threatintel.ja3_label("deadbeef") is None
 
 
+def test_beaconing_excludes_dns_ntp():
+    """Regression (found by scripts/validate.py): regular DNS to a public
+    resolver must NOT be flagged as C2 beaconing, but the same regular pattern
+    on a non-service port still is."""
+    from app.modules.network.parser import Packet
+    from app.modules.network import preprocessor as pre
+
+    dns = [Packet(ts=float(i * 5), src_ip="192.168.1.50", dst_ip="8.8.8.8",
+                  src_port=40000, dst_port=53, protocol="UDP", length=80) for i in range(10)]
+    assert not any(o.type == "beaconing" for o in pre.preprocess(dns, "dns").observations)
+
+    c2 = [Packet(ts=float(i * 5), src_ip="192.168.1.50", dst_ip="203.0.113.9",
+                 src_port=51000, dst_port=8443, protocol="TCP", length=80) for i in range(10)]
+    assert any(o.type == "beaconing" for o in pre.preprocess(c2, "c2").observations)
+
+
 def test_network_uses_threatintel():
     summary = net_pre.preprocess(
         net_parser.parse_pcap(str(SAMPLES / "beaconing.pcap")), "beaconing.pcap")

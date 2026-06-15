@@ -7,5 +7,6 @@ venv/
 node_modules/
 dist/
 samples/generated/
+samples/validation/
 *.db
 .DS_Store

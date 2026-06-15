@@ -159,8 +159,10 @@ def preprocess(packets: list[Packet], source_file: str) -> Summary:
         bytes_per_dst[dst] += flow["bytes"]
         flow_ts = sorted(flow["timestamps"])
 
-        # Beaconing: regular intervals to an external host
-        if not is_private(dst) and len(flow_ts) >= 6:
+        # Beaconing: regular intervals to an external host. Skip DNS (53) and
+        # NTP (123): those are periodic by design, so flagging them as C2 is a
+        # false positive — DNS-based C2 is detected separately as dns_tunneling.
+        if not is_private(dst) and dport not in (53, 123) and len(flow_ts) >= 6:
             intervals = [b - a for a, b in zip(flow_ts, flow_ts[1:]) if b - a > 0.5]
             if len(intervals) >= 5:
                 mean = sum(intervals) / len(intervals)
