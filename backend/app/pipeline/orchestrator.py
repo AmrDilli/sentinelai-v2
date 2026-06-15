@@ -23,11 +23,8 @@ from app.ai.playbook import generate_playbook
 
 PCAP_EXTS = {".pcap", ".cap", ".pcapng"}
 LOG_EXTS = {".evtx", ".xml", ".jsonl", ".json"}
-# Accepted "suspicious file" types for static malware analysis.
-MALWARE_EXTS = {".exe", ".dll", ".sys", ".scr", ".com", ".bin", ".dat", ".msi",
-                ".ps1", ".vbs", ".bat", ".js", ".jar", ".hta", ".lnk",
-                ".doc", ".docx", ".xls", ".xlsx", ".rtf", ".pdf",
-                ".zip", ".elf", ".o", ".so", ".apk"}
+# Accepted executable types for static malware analysis (no documents/archives).
+MALWARE_EXTS = {".exe", ".dll", ".sys", ".scr", ".com", ".bin", ".dat"}
 # The full upload allow-list — anything else is rejected at the API boundary.
 ALLOWED_EXTS = PCAP_EXTS | LOG_EXTS | MALWARE_EXTS
 

@@ -130,12 +130,28 @@ async def analyze(background: BackgroundTasks,
 
     detected = module or orchestrator.detect_module(str(dest))
     with _LOCK:
+        case_number = _next_case_number(user["id"], detected)
         store.upsert({
             "id": job_id, "user_id": user["id"], "filename": file.filename,
             "module": detected, "status": "running", "progress": 0, "stage": "Queued",
+            "case_number": case_number,
         })
     background.add_task(_run_pipeline_job, job_id, str(dest), module or None)
-    return {"id": job_id, "module": detected, "status": "running"}
+    return {"id": job_id, "module": detected, "status": "running", "case_number": case_number}
+
+
+def _next_case_number(user_id: str, module: str) -> str:
+    """Human case id: <N|F|M><year>-<seq>, e.g. N2026-001. Sequence runs per
+    user/module/year. Call inside _LOCK."""
+    from datetime import datetime, timezone
+    prefix = {"network": "N", "forensics": "F", "malware": "M"}.get(module, "X")
+    year = datetime.now(timezone.utc).year
+    stem = f"{prefix}{year}-"
+    used = [str(a.get("case_number", "")) for a in store.list_all(user_id)]
+    seq = sum(1 for c in used if c.startswith(stem)) + 1
+    while f"{stem}{seq:03d}" in used:        # guard against gaps from deletes
+        seq += 1
+    return f"{stem}{seq:03d}"
 
 
 def _serialize_analyses(user_id: str) -> list[dict]:
@@ -146,6 +162,7 @@ def _serialize_analyses(user_id: str) -> list[dict]:
         report = a.get("report", {})
         items.append({
             "id": a["id"], "filename": a.get("filename"), "module": a.get("module"),
+            "case_number": a.get("case_number"),
             "status": a["status"], "progress": a.get("progress", 0), "stage": a.get("stage"),
             "score": report.get("score"), "severity": report.get("severity"),
             "generated_at": report.get("generated_at"), "error": a.get("error"),
