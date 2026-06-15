@@ -23,11 +23,22 @@ from app.ai.playbook import generate_playbook
 
 PCAP_EXTS = {".pcap", ".cap", ".pcapng"}
 LOG_EXTS = {".evtx", ".xml", ".jsonl", ".json"}
+# Accepted "suspicious file" types for static malware analysis.
+MALWARE_EXTS = {".exe", ".dll", ".sys", ".scr", ".com", ".bin", ".dat", ".msi",
+                ".ps1", ".vbs", ".bat", ".js", ".jar", ".hta", ".lnk",
+                ".doc", ".docx", ".xls", ".xlsx", ".rtf", ".pdf",
+                ".zip", ".elf", ".o", ".so", ".apk"}
+# The full upload allow-list — anything else is rejected at the API boundary.
+ALLOWED_EXTS = PCAP_EXTS | LOG_EXTS | MALWARE_EXTS
+
+
+def is_allowed(filename: str) -> bool:
+    from pathlib import Path as _P
+    return _P(filename or "").suffix.lower() in ALLOWED_EXTS
 
 
 def detect_module(path: str) -> str:
-    """Route a file to the right module by extension (malware is the fallback —
-    any unknown binary is treated as a suspicious file)."""
+    """Route a file to the right module by extension."""
     suffix = Path(path).suffix.lower()
     if suffix in PCAP_EXTS:
         return "network"

@@ -106,6 +106,14 @@ async def analyze(background: BackgroundTasks,
     if module not in (None, "", "network", "forensics", "malware"):
         raise HTTPException(400, "module must be network, forensics, or malware")
 
+    # Allow-list the file type — reject anything not a supported artifact.
+    if not orchestrator.is_allowed(file.filename):
+        ext = Path(file.filename or "").suffix.lower() or "(none)"
+        raise HTTPException(
+            415, f"File type '{ext}' is not supported. Allowed: PCAP captures, "
+                 "Windows event logs (.evtx/.xml/.jsonl), and common file types "
+                 "for static analysis (.exe/.dll/.bin/.ps1/.doc/.pdf, …).")
+
     job_id = uuid.uuid4().hex[:12]
     dest = settings.UPLOAD_DIR / f"{job_id}_{Path(file.filename or 'upload').name}"
     size = 0

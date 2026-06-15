@@ -96,6 +96,13 @@ def test_correlation_requires_two_completed(client):
     assert r.status_code == 400
 
 
+def test_upload_rejects_disallowed_type(client):
+    token, user = _register(client)
+    r = client.post("/api/analyze", headers={"Authorization": f"Bearer {token}"},
+                    files={"file": ("malware.txt", b"hello", "text/plain")})
+    assert r.status_code == 415
+
+
 def test_upload_runs_pipeline_end_to_end(client):
     from tests.conftest import SAMPLES
     token, user = _register(client)
