@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { listAnalyses, getAnalysis, correlate, me, logout as apiLogout, getToken } from "./api/client.js";
+import { listAnalyses, getAnalysis, correlate, me, logout as apiLogout, getToken, loadSampleCase } from "./api/client.js";
 import { useToast } from "./components/Toast.jsx";
 import { useTheme } from "./useTheme.js";
 import AuthScreen from "./components/AuthScreen.jsx";
@@ -172,7 +172,11 @@ export default function App() {
           {mode === "live" && <LiveCapturePage />}
           {mode === "file" && <>
           {view === "dashboard" && <DashboardPage analyses={visible} onOpen={openCase}
-            onNavigate={(v, focus) => { setView(v); setCorrelated(null); if (v === "alerts" && focus) setAlertsFocus({ sev: focus, ts: Date.now() }); }} />}
+            onNavigate={(v, focus) => { setView(v); setCorrelated(null); if (v === "alerts" && focus) setAlertsFocus({ sev: focus, ts: Date.now() }); }}
+            onLoadSample={async () => {
+              try { const r = await loadSampleCase(); toast(`${r.count} sample case(s) loaded — analyzing`, "info"); refresh(); }
+              catch (e) { toast(e.message, "critical"); }
+            }} />}
           {view === "alerts" && <AlertsPage analyses={visible} onOpen={openCase} focus={alertsFocus}
             onGoToInvestigations={() => { setView("investigations"); setCorrelated(null); }} />}
           {view === "case" && <CasePage report={report}

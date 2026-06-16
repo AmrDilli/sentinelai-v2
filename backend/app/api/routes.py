@@ -140,6 +140,43 @@ async def analyze(background: BackgroundTasks,
     return {"id": job_id, "module": detected, "status": "running", "case_number": case_number}
 
 
+# Bundled, inert demo artifacts so the app can be explored with zero setup.
+# Each runs through the identical pipeline a real upload would.
+DEMO_DIR = Path(__file__).resolve().parents[3] / "samples" / "demo"
+DEMO_SAMPLES = [
+    ("demo_c2_beacon.pcap", "network", "C2 beaconing capture"),
+    ("demo_host_compromise.xml", "forensics", "Host compromise event log"),
+    ("demo_ransomware.bin", "malware", "Ransomware binary"),
+]
+
+
+@router.post("/analyze/sample")
+async def analyze_sample(background: BackgroundTasks, user: dict = Depends(current_user)):
+    """Ingest the bundled demo artifacts so a first-time visitor sees a populated
+    SOC console without having to upload anything. Same pipeline as /analyze."""
+    created = []
+    for fname, module, label in DEMO_SAMPLES:
+        src = DEMO_DIR / fname
+        if not src.exists():
+            continue
+        job_id = uuid.uuid4().hex[:12]
+        dest = settings.UPLOAD_DIR / f"{job_id}_{fname}"
+        dest.write_bytes(src.read_bytes())
+        detected = module or orchestrator.detect_module(str(dest))
+        with _LOCK:
+            case_number = _next_case_number(user["id"], detected)
+            store.upsert({
+                "id": job_id, "user_id": user["id"], "filename": f"[SAMPLE] {label}",
+                "module": detected, "status": "running", "progress": 0, "stage": "Queued",
+                "case_number": case_number, "demo": True,
+            })
+        background.add_task(_run_pipeline_job, job_id, str(dest), module)
+        created.append({"id": job_id, "module": detected, "case_number": case_number})
+    if not created:
+        raise HTTPException(500, "Demo samples are not available on the server.")
+    return {"created": created, "count": len(created)}
+
+
 def _next_case_number(user_id: str, module: str) -> str:
     """Human case id: <N|F|M><year>-<seq>, e.g. N2026-001. Sequence runs per
     user/module/year. Call inside _LOCK."""

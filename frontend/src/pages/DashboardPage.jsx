@@ -35,7 +35,7 @@ function collectKnownBad(done) {
   return out;
 }
 
-export default function DashboardPage({ analyses, onOpen, onNavigate }) {
+export default function DashboardPage({ analyses, onOpen, onNavigate, onLoadSample }) {
   const done = analyses.filter((a) => a.status === "completed");
   const reports = done.map((a) => a.report).filter(Boolean);
   const running = analyses.filter((a) => a.status === "running").length;
@@ -71,7 +71,15 @@ export default function DashboardPage({ analyses, onOpen, onNavigate }) {
       <div className="view-enter">
         <div className="page-head"><h1>Security Overview</h1><span className="sub">Live SOC console</span></div>
         <div className="card empty"><span className="big">⌖</span>
-          No analyses yet. Ingest an artifact from the Investigations tab to begin monitoring.</div>
+          No analyses yet. Ingest an artifact from the Investigations tab to begin monitoring.
+          {onLoadSample && (
+            <div style={{ marginTop: 16 }}>
+              <button className="btn primary sample-btn" onClick={onLoadSample}>⚡ Load sample cases</button>
+              <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                Loads 3 bundled demo artifacts (C2 beacon, host compromise, ransomware) so you can explore the console instantly — no upload needed.
+              </div>
+            </div>
+          )}</div>
       </div>
     );
   }

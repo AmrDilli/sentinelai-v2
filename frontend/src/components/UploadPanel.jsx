@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { uploadFile } from "../api/client.js";
+import { uploadFile, loadSampleCase } from "../api/client.js";
 import { IconUpload } from "./icons.jsx";
 
 // Mirrors the backend allow-list (orchestrator.ALLOWED_EXTS) for the file picker
@@ -15,6 +15,19 @@ export default function UploadPanel({ onUploaded, toast, compact }) {
   const [module, setModule] = useState("");
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
+
+  const loadSamples = async () => {
+    setBusy(true);
+    try {
+      const res = await loadSampleCase();
+      toast?.(`${res.count} sample case(s) loaded — analyzing`, "info");
+      onUploaded();
+    } catch (e) {
+      toast?.(e.message, "critical");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleFiles = async (files) => {
     if (!files?.length) return;
@@ -59,6 +72,13 @@ export default function UploadPanel({ onUploaded, toast, compact }) {
           <option value="forensics">Forensics (event log)</option>
           <option value="malware">Malware (static)</option>
         </select>
+      </div>
+      <button className="btn sample-btn" onClick={loadSamples} disabled={busy}
+        title="Analyze bundled demo artifacts — no upload needed">
+        {busy ? "Loading…" : "⚡ Load sample cases"}
+      </button>
+      <div className="muted" style={{ fontSize: 11, marginTop: 6, textAlign: "center" }}>
+        No file handy? Load 3 bundled demo artifacts to explore the console.
       </div>
     </div>
   );

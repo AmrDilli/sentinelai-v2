@@ -52,6 +52,10 @@ export async function uploadFile(file, module) {
   if (module) form.append("module", module);
   return asJson(await fetch(`${BASE}/analyze`, { method: "POST", headers: authHeaders(), body: form }));
 }
+// Load the bundled demo cases (zero-setup exploration of a populated console).
+export async function loadSampleCase() {
+  return asJson(await fetch(`${BASE}/analyze/sample`, { method: "POST", headers: authHeaders() }));
+}
 export async function listAnalyses() {
   return (await asJson(await fetch(`${BASE}/analyses`, { headers: authHeaders() }))).analyses;
 }

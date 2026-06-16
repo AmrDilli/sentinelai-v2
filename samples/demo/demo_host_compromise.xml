@@ -1,0 +1,46 @@
+<Events><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID>
+<TimeCreated SystemTime="2026-06-09T02:10:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">admin</Data><Data Name="IpAddress">45.133.1.99</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID>
+<TimeCreated SystemTime="2026-06-09T02:11:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">admin</Data><Data Name="IpAddress">45.133.1.99</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID>
+<TimeCreated SystemTime="2026-06-09T02:12:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">admin</Data><Data Name="IpAddress">45.133.1.99</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID>
+<TimeCreated SystemTime="2026-06-09T02:13:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">admin</Data><Data Name="IpAddress">45.133.1.99</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID>
+<TimeCreated SystemTime="2026-06-09T02:14:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">admin</Data><Data Name="IpAddress">45.133.1.99</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID>
+<TimeCreated SystemTime="2026-06-09T02:15:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">admin</Data><Data Name="IpAddress">45.133.1.99</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID>
+<TimeCreated SystemTime="2026-06-09T02:16:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">admin</Data><Data Name="IpAddress">45.133.1.99</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID>
+<TimeCreated SystemTime="2026-06-09T02:17:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">admin</Data><Data Name="IpAddress">45.133.1.99</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4624</EventID>
+<TimeCreated SystemTime="2026-06-09T02:19:30.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">admin</Data><Data Name="IpAddress">45.133.1.99</Data><Data Name="LogonType">10</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4720</EventID>
+<TimeCreated SystemTime="2026-06-09T02:25:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">svc_backup</Data><Data Name="SubjectUserName">admin</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4732</EventID>
+<TimeCreated SystemTime="2026-06-09T02:26:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TargetUserName">svc_backup</Data><Data Name="SubjectUserName">admin</Data><Data Name="GroupName">Administrators</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>7045</EventID>
+<TimeCreated SystemTime="2026-06-09T02:30:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="ServiceName">UpdaterSvc</Data><Data Name="SubjectUserName">svc_backup</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4698</EventID>
+<TimeCreated SystemTime="2026-06-09T02:31:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="TaskName">\Microsoft\Windows\Updater</Data><Data Name="SubjectUserName">svc_backup</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>5001</EventID>
+<TimeCreated SystemTime="2026-06-09T02:33:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="SubjectUserName">svc_backup</Data></EventData></Event><Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+<System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>1102</EventID>
+<TimeCreated SystemTime="2026-06-09T02:40:00.000Z"/><Computer>WORKSTATION-07</Computer></System>
+<EventData><Data Name="SubjectUserName">svc_backup</Data></EventData></Event></Events>
