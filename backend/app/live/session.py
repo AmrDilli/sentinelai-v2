@@ -186,6 +186,30 @@ def list_interfaces() -> list[dict]:
         return []
 
 
+def default_interface() -> str:
+    """Best guess at the active interface (the one carrying real traffic), so
+    the user never has to choose. Falls back to the first en* that's up."""
+    import sys
+    try:
+        if sys.platform == "darwin":
+            out = subprocess.run(["route", "get", "default"], capture_output=True, text=True, timeout=4)
+            m = re.search(r"interface:\s*(\S+)", out.stdout)
+            if m:
+                return m.group(1)
+        else:
+            out = subprocess.run(["ip", "route", "show", "default"], capture_output=True, text=True, timeout=4)
+            m = re.search(r"dev\s+(\S+)", out.stdout)
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    for i in list_interfaces():
+        if i["name"].startswith("en"):
+            return i["name"]
+    ifs = list_interfaces()
+    return ifs[0]["name"] if ifs else "en0"
+
+
 class RealCaptureSession:
     """Captures real traffic off a network interface in fixed windows. Each
     window is screened by the deterministic engine; the AI is only invoked when
@@ -195,7 +219,7 @@ class RealCaptureSession:
         self.id = uuid.uuid4().hex[:12]
         self.user_id = user_id
         self.source = "live"
-        self.interface = interface or "en0"
+        self.interface = interface or default_interface()
         self.window = max(5, int(window or 30))
         self.windows: list[dict] = []
         self._alerts: list[dict] = []

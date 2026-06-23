@@ -12,6 +12,7 @@ export default function LiveCapturePage({ toast }) {
   const [scenario, setScenario] = useState("");
   const [interfaces, setInterfaces] = useState([]);
   const [iface, setIface] = useState("en0");
+  const [showAll, setShowAll] = useState(false);
   const [running, setRunning] = useState(false);
   const [state, setState] = useState(null);
   const wsRef = useRef(null);
@@ -19,7 +20,10 @@ export default function LiveCapturePage({ toast }) {
 
   useEffect(() => {
     listScenarios().then((s) => { setScenarios(s); if (s[0]) setScenario(s[0].id); }).catch(() => {});
-    listInterfaces().then((ifs) => { setInterfaces(ifs); if (ifs[0]) setIface(ifs[0].name); }).catch(() => {});
+    listInterfaces().then((d) => {
+      setInterfaces(d.interfaces || []);
+      setIface(d.default || (d.interfaces && d.interfaces[0] && d.interfaces[0].name) || "en0");
+    }).catch(() => {});
     return () => { if (wsRef.current) wsRef.current.close(); };
   }, []);
 
@@ -87,12 +91,22 @@ export default function LiveCapturePage({ toast }) {
             </select>
           ) : (
             <>
-              <select className="tb-select" value={iface} disabled={running}
-                onChange={(e) => setIface(e.target.value)} style={{ minWidth: 160 }}>
-                {interfaces.length
-                  ? interfaces.map((i) => <option key={i.name} value={i.name}>{i.name}{i.desc ? ` — ${i.desc}` : ""}</option>)
-                  : <option value="en0">en0</option>}
-              </select>
+              {showAll ? (
+                <select className="tb-select" value={iface} disabled={running}
+                  onChange={(e) => setIface(e.target.value)} style={{ minWidth: 200 }}>
+                  {interfaces.map((i) => <option key={i.name} value={i.name}>{i.name}{i.desc ? ` — ${i.desc}` : ""}</option>)}
+                </select>
+              ) : (
+                <span style={{ fontSize: 13, color: "var(--text)" }}>
+                  Auto · <code style={{ color: "var(--brand)" }}>{iface}</code>
+                  {!running && (
+                    <button onClick={() => setShowAll(true)}
+                      style={{ marginLeft: 8, background: "none", border: "none", color: "var(--muted)", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>
+                      change
+                    </button>
+                  )}
+                </span>
+              )}
               <span className="muted" style={{ fontSize: 11 }}>30s windows · AI on suspicious</span>
             </>
           )}

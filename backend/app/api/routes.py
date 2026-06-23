@@ -436,8 +436,9 @@ def live_scenarios(user: dict = Depends(current_user)):
 
 @router.get("/live/interfaces")
 def live_interfaces(user: dict = Depends(current_user)):
-    """Network interfaces available for real capture (live-this-device mode)."""
-    return {"interfaces": live.list_interfaces()}
+    """Network interfaces available for real capture (live-this-device mode),
+    plus the auto-detected active interface so the UI can preselect it."""
+    return {"interfaces": live.list_interfaces(), "default": live.default_interface()}
 
 
 @router.post("/live/start")

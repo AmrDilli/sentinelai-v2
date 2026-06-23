@@ -101,7 +101,7 @@ export async function listScenarios() {
   return (await asJson(await fetch(`${BASE}/live/scenarios`, { headers: authHeaders() }))).scenarios;
 }
 export async function listInterfaces() {
-  return (await asJson(await fetch(`${BASE}/live/interfaces`, { headers: authHeaders() }))).interfaces;
+  return asJson(await fetch(`${BASE}/live/interfaces`, { headers: authHeaders() })); // { interfaces, default }
 }
 export async function startLive(opts) {
   const body = typeof opts === "string" ? { scenario: opts } : (opts || {});
