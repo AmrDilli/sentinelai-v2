@@ -100,10 +100,14 @@ export async function updateSettings(updates) {
 export async function listScenarios() {
   return (await asJson(await fetch(`${BASE}/live/scenarios`, { headers: authHeaders() }))).scenarios;
 }
-export async function startLive(scenario) {
+export async function listInterfaces() {
+  return (await asJson(await fetch(`${BASE}/live/interfaces`, { headers: authHeaders() }))).interfaces;
+}
+export async function startLive(opts) {
+  const body = typeof opts === "string" ? { scenario: opts } : (opts || {});
   return asJson(await fetch(`${BASE}/live/start`, {
     method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ scenario }),
+    body: JSON.stringify(body),
   }));
 }
 export async function stopLive(sessionId) {

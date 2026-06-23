@@ -434,10 +434,22 @@ def live_scenarios(user: dict = Depends(current_user)):
     return {"scenarios": live.list_scenarios()}
 
 
+@router.get("/live/interfaces")
+def live_interfaces(user: dict = Depends(current_user)):
+    """Network interfaces available for real capture (live-this-device mode)."""
+    return {"interfaces": live.list_interfaces()}
+
+
 @router.post("/live/start")
 def live_start(body: dict = Body(...), user: dict = Depends(current_user)):
     try:
-        sess = live.start_session(user["id"], body.get("scenario", ""))
+        sess = live.start_session(
+            user["id"],
+            source=body.get("source", "replay"),
+            scenario=body.get("scenario", ""),
+            interface=body.get("interface", ""),
+            window=int(body.get("window", 30) or 30),
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     return sess.snapshot()

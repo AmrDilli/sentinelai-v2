@@ -14,6 +14,11 @@ and file analysis always agree. The AI is intentionally not called in the MVP
 """
 from __future__ import annotations
 
+import os
+import re
+import shutil
+import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -158,8 +163,162 @@ class LiveSession:
             return dict(self.state)
 
 
+# ===================== real capture (this device) ==========================
+def _tcpdump_bin() -> str:
+    return shutil.which("tcpdump") or "/usr/sbin/tcpdump"
+
+
+def list_interfaces() -> list[dict]:
+    """Capturable network interfaces via `tcpdump -D`. May return [] if tcpdump
+    isn't installed or listing needs privileges."""
+    try:
+        out = subprocess.run([_tcpdump_bin(), "-D"], capture_output=True, text=True, timeout=6)
+        ifs = []
+        for line in out.stdout.splitlines():
+            m = re.match(r"\s*\d+\.([^\s]+)\s*(.*)", line)
+            if m:
+                name = m.group(1)
+                if name.startswith(("lo", "bluetooth", "p2p", "awdl")):
+                    continue
+                ifs.append({"name": name, "desc": m.group(2).strip()})
+        return ifs
+    except Exception:
+        return []
+
+
+class RealCaptureSession:
+    """Captures real traffic off a network interface in fixed windows. Each
+    window is screened by the deterministic engine; the AI is only invoked when
+    the window contains something suspicious (token-efficient)."""
+
+    def __init__(self, user_id: str, interface: str = "", window: int = 30):
+        self.id = uuid.uuid4().hex[:12]
+        self.user_id = user_id
+        self.source = "live"
+        self.interface = interface or "en0"
+        self.window = max(5, int(window or 30))
+        self.windows: list[dict] = []
+        self._alerts: list[dict] = []
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._capture_fn = None       # test hook: fn(path)->bool
+        self.state = {
+            "id": self.id, "source": "live", "interface": self.interface,
+            "window": self.window, "status": "starting", "error": None,
+            "window_index": 0, "phase": "starting", "packets": 0, "flows": 0,
+            "score": 0, "severity": "info", "ai_calls": 0,
+            "windows": [], "alerts": [],
+        }
+
+    def start(self):
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+
+    # capture one window to `path`; returns True on success
+    def _capture(self, path: str) -> tuple[bool, str]:
+        if self._capture_fn:                       # tests
+            return self._capture_fn(path), ""
+        cmd = [_tcpdump_bin(), "-i", self.interface, "-w", path, "-U", "-q", "-n"]
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        except FileNotFoundError:
+            return False, "tcpdump not found — install it (or Wireshark)."
+        waited = 0.0
+        while waited < self.window:
+            if self._stop.is_set():
+                break
+            time.sleep(0.2)
+            waited += 0.2
+            if proc.poll() is not None:             # died early (perms?)
+                break
+        proc.terminate()
+        try:
+            _, err = proc.communicate(timeout=5)
+        except Exception:
+            proc.kill(); err = b""
+        msg = (err or b"").decode(errors="ignore")
+        if "permission" in msg.lower() or "Operation not permitted" in msg:
+            return False, "Permission denied — run the backend with sudo to capture."
+        ok = os.path.exists(path) and os.path.getsize(path) > 24   # >pcap header
+        return ok, "" if ok else (msg.strip().splitlines()[-1] if msg.strip() else "No packets captured.")
+
+    def _run(self):
+        from app.ai import analyzer            # lazy: heavy import
+        idx = 0
+        while not self._stop.is_set():
+            idx += 1
+            with self._lock:
+                self.state.update({"status": "running", "phase": "capturing",
+                                   "window_index": idx})
+            tmp = os.path.join(tempfile.gettempdir(), f"sai_live_{self.id}_{idx}.pcap")
+            ok, err = self._capture(tmp)
+            if self._stop.is_set():
+                break
+            if not ok:
+                with self._lock:
+                    self.state.update({"status": "error", "error": err, "phase": "idle"})
+                return
+            with self._lock:
+                self.state["phase"] = "analyzing"
+            try:
+                packets = parser.parse_pcap(tmp)
+            except Exception:
+                packets = []
+            finally:
+                try: os.unlink(tmp)
+                except OSError: pass
+
+            summary = preprocessor.preprocess(packets, f"live-window-{idx}")
+            obs = summary.observations
+            findings, ai_used = [], False
+            if obs:                                # only spend tokens when suspicious
+                try:
+                    res = analyzer.analyze(summary)
+                    findings = res.get("findings", [])
+                    ai_used = res.get("ai_provider", "mock") != "mock" and not res.get("ai_degraded")
+                except Exception:
+                    findings = _promote(obs)       # fall back to deterministic
+            score, severity, _ = score_findings(findings)
+
+            flows = len({(p.src_ip, p.dst_ip, p.dst_port) for p in packets})
+            wrec = {
+                "index": idx, "packets": len(packets), "flows": flows,
+                "observations": len(obs), "ai_used": ai_used,
+                "score": score, "severity": severity,
+                "top": [f.get("title", "") for f in findings[:3]],
+                "at": time.strftime("%H:%M:%S"),
+            }
+            for f in findings:
+                if f.get("severity") in _ALERT_LEVELS:
+                    self._alerts.insert(0, {
+                        "at": wrec["at"], "window": idx,
+                        "severity": f.get("severity"), "description": f.get("title", ""),
+                        "mitre": list(f.get("mitre_techniques", []) or [])[:2],
+                    })
+            with self._lock:
+                self.windows.insert(0, wrec)
+                self.state.update({
+                    "phase": "capturing", "packets": len(packets), "flows": flows,
+                    "score": score, "severity": severity,
+                    "ai_calls": self.state["ai_calls"] + (1 if ai_used else 0),
+                    "windows": list(self.windows[:20]),
+                    "alerts": list(self._alerts[:30]),
+                })
+        with self._lock:
+            self.state["status"] = "stopped"
+            self.state["phase"] = "idle"
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return dict(self.state)
+
+
 # ----------------------------- session manager -----------------------------
-_SESSIONS: dict[str, LiveSession] = {}
+_SESSIONS: dict[str, object] = {}
 _MGR_LOCK = threading.Lock()
 
 
@@ -167,20 +326,27 @@ def list_scenarios() -> list[dict]:
     return [{"id": k, "label": v["label"], "blurb": v["blurb"]} for k, v in SCENARIOS.items()]
 
 
-def start_session(user_id: str, scenario: str) -> LiveSession:
-    sess = LiveSession(user_id, scenario)
+def _register(sess) -> None:
     with _MGR_LOCK:
-        # one active session per user keeps the MVP simple
-        for sid, s in list(_SESSIONS.items()):
-            if s.user_id == user_id:
+        for sid, s in list(_SESSIONS.items()):     # one active session per user
+            if getattr(s, "user_id", None) == sess.user_id:
                 s.stop()
                 _SESSIONS.pop(sid, None)
         _SESSIONS[sess.id] = sess
     sess.start()
+
+
+def start_session(user_id: str, source: str = "replay", scenario: str = "",
+                  interface: str = "", window: int = 30):
+    if source == "live":
+        sess = RealCaptureSession(user_id, interface, window)
+    else:
+        sess = LiveSession(user_id, scenario)
+    _register(sess)
     return sess
 
 
-def get_session(session_id: str) -> LiveSession | None:
+def get_session(session_id: str):
     with _MGR_LOCK:
         return _SESSIONS.get(session_id)
 
