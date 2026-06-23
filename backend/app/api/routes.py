@@ -31,6 +31,7 @@ from app.config import settings
 from app.pipeline import orchestrator
 from app.core import store, auth, report_pdf, threatintel
 from app.core.schema import Report
+from app.live import session as live
 
 router = APIRouter()
 _LOCK = threading.Lock()
@@ -425,3 +426,53 @@ def threatintel_refresh(user: dict = Depends(current_user)):
     """Pull a fresh indicator set from abuse.ch and merge it over the bundled
     snapshot. Best-effort: returns ok=False (not an HTTP error) if offline."""
     return threatintel.refresh_from_feeds()
+
+
+# ------------------------------------------------------------- live capture ---
+@router.get("/live/scenarios")
+def live_scenarios(user: dict = Depends(current_user)):
+    return {"scenarios": live.list_scenarios()}
+
+
+@router.post("/live/start")
+def live_start(body: dict = Body(...), user: dict = Depends(current_user)):
+    try:
+        sess = live.start_session(user["id"], body.get("scenario", ""))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return sess.snapshot()
+
+
+@router.post("/live/stop/{session_id}")
+def live_stop(session_id: str, user: dict = Depends(current_user)):
+    return {"stopped": live.stop_session(session_id)}
+
+
+@router.websocket("/ws/live/{session_id}")
+async def ws_live(websocket: WebSocket, session_id: str, token: str = ""):
+    """Stream a live-capture session's state. Pushes the rolling tick snapshot
+    (~2x/sec) until the replay finishes or the client disconnects."""
+    user = auth.user_for_token(token)
+    if not user:
+        await websocket.close(code=1008)
+        return
+    await websocket.accept()
+    last = None
+    try:
+        while True:
+            sess = live.get_session(session_id)
+            if not sess:
+                await websocket.send_json({"error": "session not found"})
+                return
+            state = sess.snapshot()
+            payload = json.dumps(state, sort_keys=True)
+            if payload != last:
+                last = payload
+                await websocket.send_json(state)
+            if state["status"] in ("finished", "stopped"):
+                return
+            await asyncio.sleep(0.5)
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        return

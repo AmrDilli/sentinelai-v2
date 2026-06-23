@@ -96,6 +96,25 @@ export async function updateSettings(updates) {
     body: JSON.stringify(updates),
   }));
 }
+// ---- live capture ----
+export async function listScenarios() {
+  return (await asJson(await fetch(`${BASE}/live/scenarios`, { headers: authHeaders() }))).scenarios;
+}
+export async function startLive(scenario) {
+  return asJson(await fetch(`${BASE}/live/start`, {
+    method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ scenario }),
+  }));
+}
+export async function stopLive(sessionId) {
+  return asJson(await fetch(`${BASE}/live/stop/${sessionId}`, { method: "POST", headers: authHeaders() }));
+}
+// Build the authenticated WebSocket URL for a live session.
+export function liveSocketUrl(sessionId) {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.host}${BASE}/ws/live/${sessionId}?token=${encodeURIComponent(getToken())}`;
+}
+
 export async function refreshThreatIntel() {
   return asJson(await fetch(`${BASE}/threatintel/refresh`, { method: "POST", headers: authHeaders() }));
 }

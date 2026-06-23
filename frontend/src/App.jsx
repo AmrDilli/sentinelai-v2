@@ -169,7 +169,7 @@ export default function App() {
           setTimeFilter={setTimeFilter} user={user} onLogout={handleLogout}
           onOpenCase={openCase} onViewAlerts={() => { setView("alerts"); setCorrelated(null); }} />
         <div className="content">
-          {mode === "live" && <LiveCapturePage />}
+          {mode === "live" && <LiveCapturePage toast={toast} />}
           {mode === "file" && <>
           {view === "dashboard" && <DashboardPage analyses={visible} onOpen={openCase}
             onNavigate={(v, focus) => { setView(v); setCorrelated(null); if (v === "alerts" && focus) setAlertsFocus({ sev: focus, ts: Date.now() }); }}

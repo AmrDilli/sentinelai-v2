@@ -260,6 +260,13 @@ a { color: inherit; text-decoration: none; }
 .btn.primary:hover { filter: brightness(1.08); box-shadow: 0 8px 22px -6px rgba(99,102,241,0.6); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn.sm { padding: 6px 11px; font-size: 12px; }
+/* live capture */
+.live-on { font-size: 12px; font-weight: 700; letter-spacing: 1px; color: var(--critical);
+  margin-left: 10px; vertical-align: middle; animation: livePulse 1.4s ease-in-out infinite; }
+@keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.live-feed { max-height: 320px; overflow-y: auto; }
+.live-alert { animation: alertIn 0.35s ease; }
+@keyframes alertIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .sample-btn { width: 100%; margin-top: 12px; justify-content: center; }
 .btn.sample-btn:not(.primary) {
   border-style: dashed; border-color: color-mix(in srgb, var(--brand) 55%, transparent);

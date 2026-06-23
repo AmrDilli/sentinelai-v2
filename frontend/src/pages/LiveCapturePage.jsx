@@ -1,88 +1,125 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { IconNetwork, IconPulse, IconShield, IconAlert } from "../components/icons.jsx";
+import KpiCard from "../components/KpiCard.jsx";
+import ScoreGauge from "../components/ScoreGauge.jsx";
+import { listScenarios, startLive, stopLive, liveSocketUrl } from "../api/client.js";
 
-// Placeholder preview of the planned live-capture mode. No backend yet — the
-// controls are intentionally disabled and the panels show what the live view
-// will look like once real-time monitoring is wired up.
-const PLANNED = [
-  ["Real-time ingest", "Stream packets from a replayed capture (or, later, a live interface) through the same pipeline, at true timing."],
-  ["Incremental analysis", "A rolling window re-runs detection every few seconds while traffic flows — the risk score updates continuously."],
-  ["Throttled AI", "The deterministic engine runs constantly; the AI is only called on meaningful change, so it stays fast and cheap."],
-  ["Live alerts", "Findings appear the moment a pattern emerges (e.g. beaconing after ~30s), pushed over the existing WebSocket."],
-  ["Snapshot to report", "Freeze any moment of a live session into a full TLP:AMBER incident report."],
-];
+const SEV_COLOR = { info: "#2dd4bf", low: "#facc15", medium: "#fb923c", high: "#ef5b15", critical: "#dc2626" };
 
-export default function LiveCapturePage() {
+export default function LiveCapturePage({ toast }) {
+  const [scenarios, setScenarios] = useState([]);
+  const [scenario, setScenario] = useState("");
+  const [running, setRunning] = useState(false);
+  const [state, setState] = useState(null);
+  const wsRef = useRef(null);
+  const sessRef = useRef(null);
+
+  useEffect(() => {
+    listScenarios().then((s) => { setScenarios(s); if (s[0]) setScenario(s[0].id); }).catch(() => {});
+    return () => { if (wsRef.current) wsRef.current.close(); };
+  }, []);
+
+  const start = async () => {
+    try {
+      const snap = await startLive(scenario);
+      sessRef.current = snap.id;
+      setState(snap);
+      setRunning(true);
+      const ws = new WebSocket(liveSocketUrl(snap.id));
+      wsRef.current = ws;
+      ws.onmessage = (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          if (d.error) return;
+          setState(d);
+          if (d.status === "finished" || d.status === "stopped") { setRunning(false); ws.close(); }
+        } catch { /* ignore */ }
+      };
+      ws.onclose = () => setRunning(false);
+      ws.onerror = () => setRunning(false);
+    } catch (err) {
+      toast?.(err.message, "critical");
+    }
+  };
+
+  const stop = async () => {
+    try { if (sessRef.current) await stopLive(sessRef.current); } catch { /* ignore */ }
+    if (wsRef.current) wsRef.current.close();
+    setRunning(false);
+  };
+
+  const s = state || {};
+  const sev = s.severity || "info";
+  const alerts = s.alerts || [];
+
   return (
     <div className="view-enter">
       <div className="page-head">
-        <h1>Live Capture <span className="preview-badge">PREVIEW</span></h1>
-        <span className="sub">Real-time network monitoring — coming soon</span>
+        <h1>Live Capture <span className="live-on" style={{ opacity: running ? 1 : 0.3 }}>● LIVE</span></h1>
+        <span className="sub">Real-time network monitoring — a replayed capture streamed through the live detection engine</span>
       </div>
 
-      {/* Control bar (disabled preview) */}
       <div className="card live-controls">
         <div className="live-source">
-          <span className="muted" style={{ fontSize: 12 }}>Capture source</span>
-          <select className="tb-select" disabled>
-            <option>Bundled scenario — njRAT beaconing</option>
-          </select>
-          <select className="tb-select" disabled>
-            <option>Window: 5s</option>
+          <span className="muted" style={{ fontSize: 12 }}>Scenario</span>
+          <select className="tb-select" value={scenario} disabled={running}
+            onChange={(e) => setScenario(e.target.value)} style={{ minWidth: 260 }}>
+            {scenarios.map((sc) => <option key={sc.id} value={sc.id}>{sc.label}</option>)}
           </select>
         </div>
-        <button className="btn primary" disabled>▶ Start Monitoring</button>
+        {!running
+          ? <button className="btn primary" onClick={start} disabled={!scenario}>▶ Start Monitoring</button>
+          : <button className="btn" onClick={stop}>■ Stop</button>}
       </div>
 
-      {/* Live stat tiles (placeholder values) */}
-      <div className="kpi-grid live-dim">
-        <Stat icon={<IconNetwork size={20} />} label="Packets / sec" />
-        <Stat icon={<IconPulse size={20} />} label="Active flows" />
-        <Stat icon={<IconAlert size={20} />} label="Live alerts" />
-        <Stat icon={<IconShield size={20} />} label="Risk score" />
+      {state && (
+        <div className="card" style={{ padding: "12px 16px", marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
+            <span>{s.label}</span>
+            <span>{s.packets}/{s.packets_total} packets · {s.elapsed}s · {s.speed}× speed · {s.status}</span>
+          </div>
+          <div className="mini-progress"><div className="mini-bar" style={{ width: `${s.progress || 0}%` }} /></div>
+        </div>
+      )}
+
+      <div className="kpi-grid" style={{ marginTop: 16 }}>
+        <KpiCard index={0} label="Packets / sec" value={s.pps || 0} color="var(--accent)" Icon={IconNetwork}
+          delta={running ? "streaming" : "idle"} deltaDir="flat" />
+        <KpiCard index={1} label="Active flows" value={s.flows || 0} color="var(--brand)" Icon={IconPulse}
+          delta="distinct" deltaDir="flat" />
+        <KpiCard index={2} label="Live alerts" value={alerts.length} color="var(--critical)" Icon={IconAlert}
+          delta={alerts.length ? "detections" : "none yet"} deltaDir={alerts.length ? "up" : "flat"} />
+        <KpiCard index={3} label="Risk score" value={s.score || 0} color={SEV_COLOR[sev]} Icon={IconShield}
+          delta={sev} deltaDir={(s.score || 0) > 50 ? "up" : "flat"} />
       </div>
 
       <div className="grid-2" style={{ marginTop: 20 }}>
         <div className="card">
-          <div className="card-title">What live capture will do</div>
-          <div className="rlist">
-            {PLANNED.map(([title, desc]) => (
-              <div key={title} className="plan-row">
-                <span className="plan-dot" />
-                <div>
-                  <div className="plan-title">{title}</div>
-                  <div className="plan-desc">{desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <div className="card-title">Live risk</div>
+          {state ? <ScoreGauge score={s.score || 0} severity={sev} />
+            : <div className="live-empty"><div className="live-radar"><span /><span /><span /></div>
+                <p>Monitoring is not active.</p>
+                <p className="muted" style={{ fontSize: 12 }}>Pick a scenario and press <b>Start Monitoring</b> to watch the risk score climb in real time.</p>
+              </div>}
         </div>
-        <div className="card live-stage">
-          <div className="card-title">Live stream</div>
-          <div className="live-empty">
-            <div className="live-radar"><span /><span /><span /></div>
-            <p>Monitoring is not active.</p>
-            <p className="muted" style={{ fontSize: 12 }}>
-              This panel will show a live packet stream, a scrolling timeline, and the
-              risk gauge climbing in real time as an attack unfolds. Switch to
-              <b> File Analysis</b> to analyze a capture now.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
-function Stat({ icon, label }) {
-  return (
-    <div className="kpi">
-      <div className="kpi-top">
-        <span className="kpi-label">{label}</span>
-        <span className="kpi-icon" style={{ background: "color-mix(in srgb, var(--brand) 12%, transparent)", color: "var(--brand)" }}>{icon}</span>
+        <div className="card live-stage">
+          <div className="card-title">Live alert feed {alerts.length > 0 && <span className="badge critical">{alerts.length}</span>}</div>
+          {alerts.length ? (
+            <div className="rlist live-feed">
+              {alerts.map((a, i) => (
+                <div key={i} className="rrow live-alert">
+                  <span className="dot" style={{ background: SEV_COLOR[a.severity] }} />
+                  <span className={`badge ${a.severity}`}>{a.severity}</span>
+                  <span className="nm">{a.description}</span>
+                  {(a.mitre || []).map((m) => <span key={m} className="mitre-tag">{m}</span>)}
+                  <span className="ct" style={{ minWidth: 48, textAlign: "right" }}>{a.at}s</span>
+                </div>
+              ))}
+            </div>
+          ) : <div className="empty" style={{ fontSize: 13 }}>No alerts yet — they appear the moment a pattern emerges.</div>}
+        </div>
       </div>
-      <div className="kpi-val" style={{ opacity: 0.35 }}>—</div>
-      <div className="kpi-delta flat">awaiting capture</div>
     </div>
   );
 }
