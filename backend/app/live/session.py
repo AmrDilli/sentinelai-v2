@@ -67,6 +67,31 @@ def _endpoints(packets) -> set:
     return eps
 
 
+def _traffic_breakdown(packets, top: int = 6):
+    """Protocol mix + busiest external destinations, for the live traffic panel."""
+    proto: dict[str, int] = {}
+    talk: dict[str, int] = {}
+    for p in packets:
+        if getattr(p, "dns_queries", None):
+            cat = "DNS"
+        elif getattr(p, "tls_sni", "") or p.dst_port == 443 or p.src_port == 443:
+            cat = "TLS"
+        else:
+            cat = p.protocol or "OTHER"
+        proto[cat] = proto.get(cat, 0) + 1
+        key = None
+        if getattr(p, "tls_sni", ""):
+            key = p.tls_sni
+        elif getattr(p, "dns_queries", None):
+            key = p.dns_queries[0]
+        elif p.dst_ip and not _is_private(p.dst_ip):
+            key = p.dst_ip
+        if key:
+            talk[key] = talk.get(key, 0) + 1
+    talkers = sorted(talk.items(), key=lambda kv: -kv[1])[:top]
+    return proto, [{"endpoint": k, "count": v} for k, v in talkers]
+
+
 def _promote(observations) -> list[dict]:
     out = []
     for o in observations:
@@ -146,6 +171,7 @@ class LiveSession:
             "packets": 0, "pps": 0, "flows": 0, "elapsed": 0.0,
             "progress": 0, "score": 0, "severity": "info",
             "alerts": [], "score_history": [], "geo": {}, "reputation": {},
+            "protocols": {}, "top_talkers": [],
             "speed": round(self.speed, 1),
         }
 
@@ -204,6 +230,7 @@ class LiveSession:
                         "mitre": list(getattr(o, "mitre_hints", []) or [])[:2],
                     })
         self.score_history.append([round(elapsed, 1), score])
+        proto, talkers = _traffic_breakdown(self._buffer)
         with self._lock:
             self.state.update({
                 "packets": self._idx, "pps": pps, "flows": flows,
@@ -212,6 +239,7 @@ class LiveSession:
                 "score": score, "severity": severity,
                 "alerts": list(self._alerts[:30]),
                 "score_history": list(self.score_history[-120:]),
+                "protocols": proto, "top_talkers": talkers,
             })
 
     def build_case(self):
@@ -295,6 +323,7 @@ class RealCaptureSession:
             "score": 0, "severity": "info", "ai_calls": 0,
             "usage": dict(self.usage), "windows": [], "alerts": [],
             "score_history": [], "geo": {}, "reputation": {},
+            "protocols": {}, "top_talkers": [],
             "learning": True, "baseline_size": 0, "new_endpoints": 0,
         }
 
@@ -409,6 +438,10 @@ class RealCaptureSession:
                 self._all_packets.extend(packets)
                 self.windows.insert(0, wrec)
                 self.score_history.append([idx, score])
+                proto, talkers = _traffic_breakdown(self._all_packets)
+                self.state.update({
+                    "protocols": proto, "top_talkers": talkers,
+                })
                 self.state.update({
                     "phase": "capturing", "packets": len(packets), "flows": flows,
                     "score": score, "severity": severity,

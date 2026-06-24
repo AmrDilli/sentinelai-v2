@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip } from "recharts";
+import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { IconNetwork, IconPulse, IconShield, IconAlert, IconChip, IconReport } from "../components/icons.jsx";
 import KpiCard from "../components/KpiCard.jsx";
 import ScoreGauge from "../components/ScoreGauge.jsx";
@@ -7,6 +7,13 @@ import GeoMap from "../components/GeoMap.jsx";
 import { listScenarios, listInterfaces, startLive, stopLive, snapshotLive, liveSocketUrl } from "../api/client.js";
 
 const SEV_COLOR = { info: "#2dd4bf", low: "#facc15", medium: "#fb923c", high: "#ef5b15", critical: "#dc2626" };
+const PROTO_COLOR = { TLS: "#9D7BFF", DNS: "#2FD8AE", TCP: "#38BDF8", UDP: "#FB923C", ICMP: "#F472A0", OTHER: "#64748B" };
+
+function notifyDesktop(title, body) {
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission === "granted") { try { new Notification(title, { body }); } catch { /* noop */ } }
+  else if (Notification.permission !== "denied") Notification.requestPermission().then((p) => { if (p === "granted") try { new Notification(title, { body }); } catch { /* noop */ } });
+}
 
 export default function LiveCapturePage({ toast }) {
   const [source, setSource] = useState("replay");
@@ -19,9 +26,31 @@ export default function LiveCapturePage({ toast }) {
   const [sensitivity, setSensitivity] = useState("medium");
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autoSave, setAutoSave] = useState(true);
   const [state, setState] = useState(null);
   const wsRef = useRef(null);
   const sessRef = useRef(null);
+  const prevCrit = useRef(0);
+  const autoSnapped = useRef(false);
+
+  // critical-alert notifications + auto-snapshot
+  useEffect(() => {
+    if (!state) return;
+    const crit = (state.alerts || []).filter((a) => a.severity === "critical").length;
+    if (crit > prevCrit.current) {
+      const latest = (state.alerts || []).find((a) => a.severity === "critical");
+      const msg = latest?.description || "Critical threat detected";
+      toast?.(`⚠ Critical: ${msg}`, "critical");
+      notifyDesktop("SentinelAI — Critical detection", msg);
+    }
+    prevCrit.current = crit;
+    if (autoSave && state.severity === "critical" && !autoSnapped.current && sessRef.current) {
+      autoSnapped.current = true;
+      snapshotLive(sessRef.current)
+        .then((r) => toast?.(`Auto-saved critical as case ${r.case_number}`, "info"))
+        .catch(() => {});
+    }
+  }, [state, autoSave, toast]);
 
   useEffect(() => {
     listScenarios().then((s) => { setScenarios(s); if (s[0]) setScenario(s[0].id); }).catch(() => {});
@@ -34,6 +63,8 @@ export default function LiveCapturePage({ toast }) {
 
   const start = async () => {
     setState(null);
+    prevCrit.current = 0;
+    autoSnapped.current = false;
     try {
       const opts = source === "live"
         ? { source: "live", interface: iface, window: windowSec, sensitivity }
@@ -131,7 +162,11 @@ export default function LiveCapturePage({ toast }) {
             </>
           )}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <label className="muted" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }} title="Automatically save a case when a critical threat is detected">
+            <input type="checkbox" checked={autoSave} onChange={(e) => setAutoSave(e.target.checked)} style={{ accentColor: "var(--brand)" }} />
+            Auto-save critical
+          </label>
           {hasData && <button className="btn" onClick={save} disabled={saving}>{saving ? "Saving…" : "💾 Save as case"}</button>}
           {!running
             ? <button className="btn primary" onClick={start} disabled={source === "replay" && !scenario}>▶ Start Monitoring</button>
@@ -227,6 +262,48 @@ export default function LiveCapturePage({ toast }) {
           <GeoMap geo={s.geo} reputation={s.reputation} />
         </div>
       </div>
+
+      {state && Object.keys(s.protocols || {}).length > 0 && (
+        <div className="grid-2" style={{ marginTop: 20 }}>
+          <div className="card">
+            <div className="card-title">Protocol mix</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <ResponsiveContainer width="55%" height={200}>
+                <PieChart>
+                  <Pie data={Object.entries(s.protocols).map(([name, value]) => ({ name, value }))}
+                    dataKey="value" nameKey="name" innerRadius={42} outerRadius={75} paddingAngle={2} isAnimationActive={false}>
+                    {Object.keys(s.protocols).map((k) => <Cell key={k} fill={PROTO_COLOR[k] || PROTO_COLOR.OTHER} stroke="none" />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: "#171A2A", border: "1px solid #2D3250", borderRadius: 8, fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{ flex: 1 }}>
+                {Object.entries(s.protocols).sort((a, b) => b[1] - a[1]).map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 6 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: PROTO_COLOR[k] || PROTO_COLOR.OTHER }} />
+                    <span style={{ flex: 1 }}>{k}</span>
+                    <span className="muted">{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-title">Top destinations</div>
+            {(s.top_talkers || []).length ? (
+              <div className="rlist">
+                {s.top_talkers.map((t, i) => (
+                  <div key={i} className="rrow">
+                    <span className="chip">{i + 1}</span>
+                    <code className="nm" style={{ fontSize: 12 }}>{t.endpoint}</code>
+                    <span className="muted" style={{ minWidth: 60, textAlign: "right" }}>{t.count} pkts</span>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="empty" style={{ fontSize: 13 }}>No external destinations yet.</div>}
+          </div>
+        </div>
+      )}
 
       {isLive && windows.length > 0 && (
         <div className="card" style={{ marginTop: 20 }}>
