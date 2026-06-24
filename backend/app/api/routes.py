@@ -450,6 +450,7 @@ def live_start(body: dict = Body(...), user: dict = Depends(current_user)):
             scenario=body.get("scenario", ""),
             interface=body.get("interface", ""),
             window=int(body.get("window", 30) or 30),
+            sensitivity=body.get("sensitivity", "medium"),
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc))
@@ -459,6 +460,32 @@ def live_start(body: dict = Body(...), user: dict = Depends(current_user)):
 @router.post("/live/stop/{session_id}")
 def live_stop(session_id: str, user: dict = Depends(current_user)):
     return {"stopped": live.stop_session(session_id)}
+
+
+@router.post("/live/{session_id}/snapshot")
+def live_snapshot(session_id: str, user: dict = Depends(current_user)):
+    """Freeze the captured-so-far traffic of a live session into a full case +
+    incident report, stored like any other analysis."""
+    sess = live.get_session(session_id)
+    if not sess:
+        raise HTTPException(404, "Session not found")
+    try:
+        report = sess.build_case()
+    except Exception as exc:
+        raise HTTPException(500, f"Snapshot failed: {exc}")
+    if not (report.get("findings") or report.get("summary", {}).get("observations")):
+        raise HTTPException(400, "Nothing captured yet — let it run a little longer.")
+    job_id = uuid.uuid4().hex[:12]
+    with _LOCK:
+        case_number = _next_case_number(user["id"], "network")
+        store.upsert({
+            "id": job_id, "user_id": user["id"],
+            "filename": f"Live snapshot — {getattr(sess, 'label', 'capture')}",
+            "module": "network", "status": "completed", "progress": 100, "stage": "Done",
+            "case_number": case_number, "report": report, "live_snapshot": True,
+        })
+    return {"id": job_id, "case_number": case_number,
+            "severity": report.get("severity"), "score": report.get("score")}
 
 
 @router.websocket("/ws/live/{session_id}")

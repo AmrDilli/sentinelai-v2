@@ -87,23 +87,37 @@ def run_analysis(path: str, module: str | None = None,
     progress(10, "Parsing & pre-processing")
     summary = build_summary(path, module, enable_enrichment)
     progress(45, "AI analysis")
+    return report_from_summary(summary, module, analysis_id, progress)
+
+
+def report_from_summary(summary, module: str, analysis_id: str | None = None,
+                        progress=None) -> Report:
+    """Stages 3-6 from an already-built Summary. Lets callers that already hold
+    a Summary (e.g. live-capture snapshots) produce a full Report without going
+    back to a file on disk."""
+    analysis_id = analysis_id or uuid.uuid4().hex[:12]
+
+    def _p(pct, stage):
+        if progress:
+            try: progress(pct, stage)
+            except Exception: pass
 
     # Stage 3: AI reads the SUMMARY, never the raw file
     ai_result = analyze(summary)
     findings = ai_result["findings"]
-    progress(75, "Scoring & MITRE mapping")
+    _p(75, "Scoring & MITRE mapping")
 
     # Stage 4: scoring
     score, severity, distribution = score_findings(findings)
 
-    # Stage 5: playbook (single-module here; /correlate does cross-module)
-    progress(85, "Generating playbook")
+    # Stage 5: playbook
+    _p(85, "Generating playbook")
     playbook = generate_playbook([{
         "module": module, "findings": findings, "narrative": ai_result["narrative"],
     }])
 
     # Stage 6: tiered response actions
-    progress(95, "Response actions")
+    _p(95, "Response actions")
     actions = soar.generate_actions(findings, summary.to_dict()["iocs"], score)
 
     return Report(
