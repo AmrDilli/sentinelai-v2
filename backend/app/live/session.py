@@ -128,6 +128,14 @@ def _spawn_geo_refresher(session):
     threading.Thread(target=loop, daemon=True).start()
 
 
+def _apply_watchlist(summary, user_id):
+    try:
+        from app.core import watchlist
+        watchlist.apply(summary, user_id)
+    except Exception:
+        pass
+
+
 def _build_case(packets, label, user_id):
     """Freeze captured packets into a full Report (reuses the file pipeline)."""
     from app.modules.network import enrich
@@ -137,6 +145,7 @@ def _build_case(packets, label, user_id):
         summary = enrich.enrich(summary, max_ips=12)
     except Exception:
         pass
+    _apply_watchlist(summary, user_id)
     report = orchestrator.report_from_summary(summary, "network")
     return report.to_dict()
 
@@ -219,6 +228,7 @@ class LiveSession:
         score, severity = 0, "info"
         if self._buffer:
             summary = preprocessor.preprocess(self._buffer, self.label)
+            _apply_watchlist(summary, self.user_id)
             findings = _promote(summary.observations)
             score, severity, _ = score_findings(findings)
             for o in summary.observations:
@@ -392,6 +402,7 @@ class RealCaptureSession:
                 except OSError: pass
 
             summary = preprocessor.preprocess(packets, f"live-window-{idx}")
+            _apply_watchlist(summary, self.user_id)
             obs = summary.observations
 
             # baseline / anomaly tracking

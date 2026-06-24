@@ -193,6 +193,11 @@ a { color: inherit; text-decoration: none; }
   background: var(--card); border: 1px solid var(--border); color: var(--text);
   border-radius: 9px; padding: 9px 12px; font-size: 13px; font-family: var(--font-body); cursor: pointer;
 }
+.tb-input {
+  background: var(--card); border: 1px solid var(--border); color: var(--text);
+  border-radius: 9px; padding: 9px 12px; font-size: 13px; font-family: var(--font-body);
+}
+.tb-input:focus { outline: none; border-color: var(--brand); }
 .tb-icon {
   position: relative; width: 40px; height: 40px; border-radius: 11px;
   border: 1px solid var(--border); background: var(--card);

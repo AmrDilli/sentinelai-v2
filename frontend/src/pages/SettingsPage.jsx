@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { IconChip, IconCloud, IconNetwork, IconShield, IconCheck } from "../components/icons.jsx";
 import { refreshThreatIntel, getSettings, updateSettings } from "../api/client.js";
+import WatchlistPanel from "../components/WatchlistPanel.jsx";
 
 function Integration({ Icon, color, name, desc, connected, detail }) {
   return (
@@ -201,6 +202,8 @@ export default function SettingsPage({ health, toast }) {
           <div className="stat-box"><div className="stat-val">{ti.domains ?? "—"}</div><div className="stat-lbl">Known-bad domains</div></div>
         </div>
       </div>
+
+      <WatchlistPanel toast={toast} />
     </div>
   );
 }

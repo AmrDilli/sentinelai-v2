@@ -31,6 +31,8 @@ app.include_router(router, prefix="/api")
 def _startup():
     store.init_db()
     auth.init_auth()
+    from app.core import watchlist
+    watchlist.init_db()
 
 
 @app.get("/")

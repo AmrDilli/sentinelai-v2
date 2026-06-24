@@ -29,7 +29,7 @@ from fastapi.responses import Response
 
 from app.config import settings
 from app.pipeline import orchestrator
-from app.core import store, auth, report_pdf, threatintel
+from app.core import store, auth, report_pdf, threatintel, watchlist
 from app.core.schema import Report
 from app.live import session as live
 
@@ -87,11 +87,13 @@ def _set_progress(job_id: str, pct: int, stage: str):
             store.upsert(rec)
 
 
-def _run_pipeline_job(job_id: str, file_path: str, module: str | None):
+def _run_pipeline_job(job_id: str, file_path: str, module: str | None, user_id: str = ""):
     def cb(pct, stage):
         _set_progress(job_id, pct, stage)
 
-    result = orchestrator.safe_run(file_path, module, progress_cb=cb, analysis_id=job_id)
+    hook = (lambda s: watchlist.apply(s, user_id)) if user_id else None
+    result = orchestrator.safe_run(file_path, module, progress_cb=cb,
+                                   analysis_id=job_id, summary_hook=hook)
     with _LOCK:
         rec = store.get(job_id) or {"id": job_id}
         rec.update(result)
@@ -137,7 +139,7 @@ async def analyze(background: BackgroundTasks,
             "module": detected, "status": "running", "progress": 0, "stage": "Queued",
             "case_number": case_number,
         })
-    background.add_task(_run_pipeline_job, job_id, str(dest), module or None)
+    background.add_task(_run_pipeline_job, job_id, str(dest), module or None, user["id"])
     return {"id": job_id, "module": detected, "status": "running", "case_number": case_number}
 
 
@@ -171,7 +173,7 @@ async def analyze_sample(background: BackgroundTasks, user: dict = Depends(curre
                 "module": detected, "status": "running", "progress": 0, "stage": "Queued",
                 "case_number": case_number, "demo": True,
             })
-        background.add_task(_run_pipeline_job, job_id, str(dest), module)
+        background.add_task(_run_pipeline_job, job_id, str(dest), module, user["id"])
         created.append({"id": job_id, "module": detected, "case_number": case_number})
     if not created:
         raise HTTPException(500, "Demo samples are not available on the server.")
@@ -426,6 +428,26 @@ def threatintel_refresh(user: dict = Depends(current_user)):
     """Pull a fresh indicator set from abuse.ch and merge it over the bundled
     snapshot. Best-effort: returns ok=False (not an HTTP error) if offline."""
     return threatintel.refresh_from_feeds()
+
+
+# --------------------------------------------------------------- watchlist ---
+@router.get("/watchlist")
+def watchlist_list(user: dict = Depends(current_user)):
+    return {"indicators": watchlist.list_for(user["id"])}
+
+
+@router.post("/watchlist")
+def watchlist_add(body: dict = Body(...), user: dict = Depends(current_user)):
+    try:
+        return watchlist.add(user["id"], body.get("type", ""), body.get("value", ""),
+                             body.get("severity", "high"), body.get("note", ""))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.delete("/watchlist/{wid}")
+def watchlist_remove(wid: str, user: dict = Depends(current_user)):
+    return {"removed": watchlist.remove(user["id"], wid)}
 
 
 # ------------------------------------------------------------- live capture ---

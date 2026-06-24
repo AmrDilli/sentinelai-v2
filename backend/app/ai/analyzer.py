@@ -111,7 +111,7 @@ _CACHE: dict[str, dict] = {}
 # The AI must not be able to suppress these (e.g. via prompt injection in the
 # artifact), so their severity is enforced as a floor after AI analysis.
 AUTHORITATIVE = {"malicious_ip", "known_malware", "known_bad_ip",
-                 "known_bad_domain", "malicious_ja3", "rule_match"}
+                 "known_bad_domain", "malicious_ja3", "rule_match", "watchlist_match"}
 _SEV = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
 # Common prompt-injection trigger phrases to defang in attacker-controlled text.

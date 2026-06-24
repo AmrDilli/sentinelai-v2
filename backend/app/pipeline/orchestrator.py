@@ -70,9 +70,12 @@ def build_summary(path: str, module: str, enable_enrichment: bool = True) -> Sum
 
 def run_analysis(path: str, module: str | None = None,
                  enable_enrichment: bool = True,
-                 progress_cb=None, analysis_id: str | None = None) -> Report:
+                 progress_cb=None, analysis_id: str | None = None,
+                 summary_hook=None) -> Report:
     """Full pipeline for one file. `progress_cb(percent:int, stage:str)` is called
-    as each stage completes so the UI can show a live progress bar."""
+    as each stage completes so the UI can show a live progress bar. `summary_hook`
+    (if given) may mutate the Summary after pre-processing and before the AI runs
+    — used to inject per-user watchlist matches."""
     module = module or detect_module(path)
     analysis_id = analysis_id or uuid.uuid4().hex[:12]
 
@@ -86,6 +89,9 @@ def run_analysis(path: str, module: str | None = None,
     # Stages 1-2: parse + pre-process (+ threat intel)
     progress(10, "Parsing & pre-processing")
     summary = build_summary(path, module, enable_enrichment)
+    if summary_hook:
+        try: summary_hook(summary)
+        except Exception: pass
     progress(45, "AI analysis")
     return report_from_summary(summary, module, analysis_id, progress)
 
@@ -169,10 +175,11 @@ def correlate(reports: list[Report]) -> dict:
 
 
 def safe_run(path: str, module: str | None = None, progress_cb=None,
-             analysis_id: str | None = None) -> dict:
+             analysis_id: str | None = None, summary_hook=None) -> dict:
     """Wrapper that converts failures into an error report dict (API-friendly)."""
     try:
-        report = run_analysis(path, module, progress_cb=progress_cb, analysis_id=analysis_id)
+        report = run_analysis(path, module, progress_cb=progress_cb,
+                              analysis_id=analysis_id, summary_hook=summary_hook)
         return {"status": "completed", "progress": 100, "stage": "Done",
                 "report": report.to_dict()}
     except ValueError as exc:  # expected, user-facing (bad file, wrong format)

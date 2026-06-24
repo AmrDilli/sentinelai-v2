@@ -122,6 +122,20 @@ export function liveSocketUrl(sessionId) {
   return `${proto}://${location.host}${BASE}/ws/live/${sessionId}?token=${encodeURIComponent(getToken())}`;
 }
 
+// ---- IOC watchlist ----
+export async function listWatchlist() {
+  return (await asJson(await fetch(`${BASE}/watchlist`, { headers: authHeaders() }))).indicators;
+}
+export async function addWatchlist(indicator) {
+  return asJson(await fetch(`${BASE}/watchlist`, {
+    method: "POST", headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(indicator),
+  }));
+}
+export async function removeWatchlist(id) {
+  return asJson(await fetch(`${BASE}/watchlist/${id}`, { method: "DELETE", headers: authHeaders() }));
+}
+
 export async function refreshThreatIntel() {
   return asJson(await fetch(`${BASE}/threatintel/refresh`, { method: "POST", headers: authHeaders() }));
 }
