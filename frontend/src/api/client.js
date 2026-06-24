@@ -113,6 +113,9 @@ export async function startLive(opts) {
 export async function stopLive(sessionId) {
   return asJson(await fetch(`${BASE}/live/stop/${sessionId}`, { method: "POST", headers: authHeaders() }));
 }
+export async function snapshotLive(sessionId) {
+  return asJson(await fetch(`${BASE}/live/${sessionId}/snapshot`, { method: "POST", headers: authHeaders() }));
+}
 // Build the authenticated WebSocket URL for a live session.
 export function liveSocketUrl(sessionId) {
   const proto = location.protocol === "https:" ? "wss" : "ws";
